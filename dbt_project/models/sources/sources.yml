@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: github_raw
+    schema: public
+    tables:
+      - name: raw_github_pulls
+        identifier: raw_github_pulls 
+        description: |
+          Raw data for GitHub pull requests extracted from the GitHub API and loaded by Airflow.
+        columns:
+          - name: repo_name
+          - name: pr_id
+            description: Unique ID of the Pull Request, used as the primary key.
+            tests:
+              - unique
+              - not_null
+          - name: state
+          - name: created_at
+          - name: merged_at
+          - name: user_login

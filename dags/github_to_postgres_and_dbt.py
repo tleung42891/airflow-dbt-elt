@@ -1,0 +1,135 @@
+from __future__ import annotations
+import pendulum
+import json 
+from airflow.decorators import dag, task
+from airflow.providers.http.hooks.http import HttpHook
+from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.operators.bash import BashOperator 
+from typing import List, Tuple, Any
+
+# --- CONFIGURATION ---
+GITHUB_CONN_ID = "github_api_conn"
+POSTGRES_CONN_ID = "postgres_default" 
+
+MY_PROJECTS = [
+    "tleung42891/productivity",
+    "tleung42891/develop_health_example",
+    "tleung42891/dbt_poc",
+] 
+
+# --- DAG DEFINITION ---
+@dag(
+    dag_id="github_to_postgres_and_dbt", 
+    schedule=None,
+    start_date=pendulum.datetime(2025, 1, 1, tz="UTC"),
+    catchup=False,
+    tags=["github", "dbt", "elt"],
+)
+def github_to_postgres_and_dbt():
+    
+    @task
+    def extract_pull_requests(conn_id: str, repo: str) -> List[Tuple[Any, ...]]:
+        """
+        Extracts closed PR data for a specific repository using the GitHub API token.
+        """
+        http_hook = HttpHook(method='GET', http_conn_id=conn_id)
+        conn = http_hook.get_connection(conn_id)
+        
+        # Retrieve Token from 'Extra' field
+        try:
+            extra_conf = json.loads(conn.extra)
+            token = extra_conf['token']
+        except (json.JSONDecodeError, KeyError) as e:
+            raise ValueError(f"Error accessing GitHub token from connection 'Extra' field: {e}")
+
+        endpoint = f"/repos/{repo}/pulls"
+        headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        # Make the API Call (state=closed, 100 per page)
+        response = http_hook.run(
+            endpoint=endpoint, 
+            data={"state": "closed", "per_page": 100}, 
+            headers=headers
+        )
+        
+        pr_data = response.json()
+        
+        # Format Data for Postgres Insertion (repo_name, pr_id, state, created_at, merged_at, user_login)
+        records = []
+        for pr in pr_data:
+            records.append((
+                repo,
+                pr.get('id'),
+                pr.get('state'),
+                pr.get('created_at'),
+                pr.get('merged_at'),
+                pr.get('user', {}).get('login')
+            ))
+            
+        print(f"Prepared {len(records)} pull request records for {repo}.")
+        return records
+
+    @task
+    def load_raw_data(data: List[Tuple[Any, ...]]):
+        """Loads the extracted records into the raw PostgreSQL table using built-in upsert logic."""
+        if not data:
+            print("No data to load.")
+            return
+
+        postgres_hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        
+        target_table = "raw_github_pulls"
+        target_columns = ["repo_name", "pr_id", "state", "created_at", "merged_at", "user_login"]
+
+        # Insert rows, using 'pr_id' for replace/upsert logic
+        postgres_hook.insert_rows(
+            table=target_table,
+            rows=data,
+            target_fields=target_columns,
+            replace=True, 
+            replace_index="pr_id"
+        )
+        
+        print(f"Successfully loaded {len(data)} unique records into {target_table}.")
+
+    #  Extract and Load in Parallel
+    all_load_tasks = []
+
+    for project in MY_PROJECTS:
+        repo_name_safe = project.replace('/', '_')
+        
+        # Extract
+        raw_pulls = extract_pull_requests.override(task_id=f"extract_{repo_name_safe}")(
+            conn_id=GITHUB_CONN_ID, 
+            repo=project
+        )
+        
+        # Load
+        load_task = load_raw_data.override(task_id=f"load_{repo_name_safe}")(
+            data=raw_pulls
+        )
+        all_load_tasks.append(load_task)
+
+    # Transformation
+    run_dbt_models = BashOperator(
+        task_id='run_dbt_transformations',
+        bash_command=f"""
+                    OUTPUT=$(docker exec dbt_cli dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt)
+                    echo "$OUTPUT"
+                    
+                    # Check if the output contains the success line  and force a "Completed successfully"
+                    if echo "$OUTPUT" | grep -q "Completed successfully"; then
+                        exit 0 # Force success if the transformation completed
+                    else
+                        exit 1 # Fail otherwise
+                    fi
+                """,
+    )
+
+    # The dbt transformation waits for all parallel load tasks to complete successfully.
+    all_load_tasks >> run_dbt_models
+
+github_to_postgres_and_dbt()

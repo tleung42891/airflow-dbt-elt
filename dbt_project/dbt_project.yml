@@ -1,0 +1,8 @@
+name: 'personal_demo'
+version: '1.0.0'
+config-version: 2
+profile: 'postgres'
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+target-path: "target"

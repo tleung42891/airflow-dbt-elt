@@ -1,0 +1,19 @@
+# --- Dependencies and Artifacts ---
+.env
+.DS_Store
+target/
+dbt_packages/
+
+# --- Airflow ---
+logs/
+airflow.cfg
+
+# --- Python ---
+__pycache__/
+.venv/
+
+# --- Docker Secrets ---
+dbt_project/profiles.yml
+secrets/ 
+config/
+airflow_secrets.json
