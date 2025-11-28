@@ -13,6 +13,7 @@ MY_PROJECTS = [
     "tleung42891/productivity",
     "tleung42891/develop_health_example",
     "tleung42891/dbt_poc",
+    "tleung42891/airflow-dbt-elt",
 ] 
 
 # --- DAG ---

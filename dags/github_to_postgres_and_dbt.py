@@ -15,6 +15,7 @@ MY_PROJECTS = [
     "tleung42891/productivity",
     "tleung42891/develop_health_example",
     "tleung42891/dbt_poc",
+    "tleung42891/airflow-dbt-elt",
 ] 
 
 # --- DAG DEFINITION ---
@@ -116,11 +117,12 @@ def github_to_postgres_and_dbt():
     # Transformation
     run_dbt_models = BashOperator(
         task_id='run_dbt_transformations',
-        bash_command=f"""
+        bash_command=f
+                """
                     OUTPUT=$(docker exec dbt_cli dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt)
                     echo "$OUTPUT"
                     
-                    # Check if the output contains the success line  and force a "Completed successfully"
+                    # Check if the output contains the "success line" and force a "Completed successfully"
                     if echo "$OUTPUT" | grep -q "Completed successfully"; then
                         exit 0 # Force success if the transformation completed
                     else
