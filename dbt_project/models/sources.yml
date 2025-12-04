@@ -1,10 +1,10 @@
 version: 2
 
 sources:
-  - name: github_raw
+  - name: github
     schema: public
     tables:
-      - name: raw_github_pulls
+      - name: pulls
         identifier: raw_github_pulls 
         description: |
           Raw data for GitHub pull requests extracted from the GitHub API and loaded by Airflow.
@@ -19,3 +19,11 @@ sources:
           - name: created_at
           - name: merged_at
           - name: user_login
+      - name: contributions
+        identifier: raw_github_contributions 
+        description: |
+          Raw data for GitHub Contributions extracted from the GitHub UI API and loaded by Airflow.
+        columns:
+          - name: username
+          - name: date
+          - name: contribution_count

@@ -10,4 +10,4 @@ SELECT
     merged_at,
     user_login,
     ROW_NUMBER() OVER (ORDER BY created_at) AS primary_key
-FROM {{ source('github_raw', 'raw_github_pulls') }}
+FROM {{ source('github', 'pulls') }}
