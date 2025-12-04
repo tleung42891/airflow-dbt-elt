@@ -1,0 +1,61 @@
+version: 2
+
+models:
+  - name: stg_github_contributions
+    description: |
+      Staging model for GitHub contributions data.
+      Deduplicates contributions by username and date, keeping only the first record
+      for each unique combination. This ensures data quality before downstream analytics.
+    columns:
+      - name: username
+        description: GitHub username
+        tests:
+          - not_null
+      - name: date
+        description: Date of the contribution
+        tests:
+          - not_null
+      - name: contribution_count
+        description: Number of contributions on this date
+        tests:
+          - not_null
+      - name: row_num
+        description: |
+          Row number used for deduplication (internal field).
+          Always 1 in final output due to WHERE row_num = 1 filter.
+
+  - name: stg_github_pulls
+    description: |
+      Staging model for GitHub pull requests data.
+      Cleans and standardizes pull request data from the raw source.
+      Adds a primary_key for downstream joins and analytics.
+    columns:
+      - name: repo_name
+        description: Full repository name in format 'owner/repo'
+        tests:
+          - not_null
+      - name: pr_id
+        description: Unique ID of the Pull Request from GitHub API
+        tests:
+          - not_null
+      - name: state
+        description: State of the pull request (e.g., 'open', 'closed')
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['open', 'closed']
+      - name: created_at
+        description: Timestamp when the pull request was created
+        tests:
+          - not_null
+      - name: merged_at
+        description: Timestamp when the pull request was merged (NULL if not merged)
+      - name: user_login
+        description: GitHub username of the pull request creator
+        tests:
+          - not_null
+      - name: primary_key
+        description: |
+          Synthetic primary key generated using ROW_NUMBER().
+          Used for downstream joins and unique identification.
+

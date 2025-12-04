@@ -1,0 +1,293 @@
+version: 2
+
+models:
+  - name: mart_github_pulls_user_summary
+    description: |
+      User-level summary statistics for GitHub pull requests.
+      Provides overall metrics including total PRs, merge rates, time to merge, and repository participation.
+    columns:
+      - name: user_login
+        description: GitHub username
+        tests:
+          - not_null
+          - unique
+      - name: total_pulls
+        description: Total number of pull requests created
+        tests:
+          - not_null
+      - name: merged_pulls
+        description: Number of pull requests that were merged
+      - name: closed_not_merged_pulls
+        description: Number of pull requests that were closed without merging
+      - name: open_pulls
+        description: Number of currently open pull requests
+      - name: merge_rate_percent
+        description: Percentage of closed PRs that were merged (0-100)
+      - name: first_pr_date
+        description: Date of first pull request created
+      - name: last_pr_date
+        description: Date of most recent pull request created
+      - name: repos_contributed_to
+        description: Number of distinct repositories the user has created PRs in
+      - name: avg_days_to_merge
+        description: Average number of days from PR creation to merge
+
+  - name: mart_github_pulls_repo_summary
+    description: |
+      Repository-level summary statistics for GitHub pull requests.
+      Provides metrics per repository including PR counts, merge rates, contributor counts, and merge times.
+    columns:
+      - name: repo_name
+        description: Full repository name in format 'owner/repo'
+        tests:
+          - not_null
+          - unique
+      - name: total_pulls
+        description: Total number of pull requests in the repository
+        tests:
+          - not_null
+      - name: merged_pulls
+        description: Number of pull requests that were merged
+      - name: closed_not_merged_pulls
+        description: Number of pull requests that were closed without merging
+      - name: open_pulls
+        description: Number of currently open pull requests
+      - name: merge_rate_percent
+        description: Percentage of closed PRs that were merged (0-100)
+      - name: unique_contributors
+        description: Number of distinct users who created PRs in this repository
+      - name: first_pr_date
+        description: Date of first pull request in the repository
+      - name: last_pr_date
+        description: Date of most recent pull request in the repository
+      - name: avg_days_to_merge
+        description: Average number of days from PR creation to merge
+      - name: median_days_to_merge
+        description: Median number of days from PR creation to merge
+
+  - name: mart_github_pulls_monthly
+    description: |
+      Monthly aggregated pull request statistics.
+      Provides monthly totals, merge rates, and contributor counts for tracking PR activity over time.
+    columns:
+      - name: month_start
+        description: First day of the month
+        tests:
+          - not_null
+      - name: month_label
+        description: Month in YYYY-MM format
+      - name: total_pulls
+        description: Total pull requests created in the month
+        tests:
+          - not_null
+      - name: merged_pulls
+        description: Number of pull requests merged in the month
+      - name: closed_not_merged_pulls
+        description: Number of pull requests closed without merging in the month
+      - name: open_pulls
+        description: Number of pull requests still open at end of month
+      - name: merge_rate_percent
+        description: Merge rate for the month (0-100)
+      - name: unique_contributors
+        description: Number of distinct users who created PRs in the month
+      - name: unique_repos
+        description: Number of distinct repositories with PRs in the month
+      - name: avg_days_to_merge
+        description: Average days to merge for PRs merged in the month
+
+  - name: mart_github_pulls_weekly
+    description: |
+      Weekly aggregated pull request statistics.
+      Provides weekly totals and metrics for tracking PR activity patterns.
+    columns:
+      - name: week_start
+        description: Start date of the week (Monday)
+        tests:
+          - not_null
+      - name: total_pulls
+        description: Total pull requests created in the week
+        tests:
+          - not_null
+      - name: merged_pulls
+        description: Number of pull requests merged in the week
+      - name: closed_not_merged_pulls
+        description: Number of pull requests closed without merging in the week
+      - name: open_pulls
+        description: Number of pull requests still open at end of week
+      - name: merge_rate_percent
+        description: Merge rate for the week (0-100)
+      - name: unique_contributors
+        description: Number of distinct users who created PRs in the week
+      - name: unique_repos
+        description: Number of distinct repositories with PRs in the week
+      - name: avg_days_to_merge
+        description: Average days to merge for PRs merged in the week
+
+  - name: mart_github_pulls_leaderboard
+    description: |
+      User rankings and leaderboard based on pull request metrics.
+      Includes rankings by total PRs, merged PRs, merge rate, and repository diversity.
+      Lower overall_score indicates better ranking.
+    columns:
+      - name: user_login
+        description: GitHub username
+        tests:
+          - not_null
+          - unique
+      - name: total_pulls
+        description: Total number of pull requests created
+      - name: merged_pulls
+        description: Number of pull requests merged
+      - name: open_pulls
+        description: Number of currently open pull requests
+      - name: repos_contributed_to
+        description: Number of distinct repositories contributed to
+      - name: merge_rate_percent
+        description: Percentage of closed PRs that were merged
+      - name: avg_days_to_merge
+        description: Average days to merge
+      - name: rank_by_total
+        description: Rank by total PRs (1 = highest)
+      - name: rank_by_merged
+        description: Rank by merged PRs (1 = highest)
+      - name: rank_by_merge_rate
+        description: Rank by merge rate (1 = highest)
+      - name: rank_by_repos
+        description: Rank by number of repositories (1 = highest)
+      - name: overall_score
+        description: |
+          Weighted overall score combining all rankings.
+          Lower score = better ranking.
+          Formula: (rank_by_total * 0.4) + (rank_by_merged * 0.3) + (rank_by_merge_rate * 0.2) + (rank_by_repos * 0.1)
+
+  - name: mart_github_pulls_trends
+    description: |
+      Month-over-month trends and growth metrics for pull requests.
+      Includes month-over-month changes, percentage changes, and 3-month moving averages.
+    columns:
+      - name: month_start
+        description: First day of the month
+        tests:
+          - not_null
+      - name: month_label
+        description: Month in YYYY-MM format
+      - name: monthly_pulls
+        description: Total pull requests created in the month
+        tests:
+          - not_null
+      - name: monthly_merged
+        description: Total pull requests merged in the month
+      - name: prev_month_pulls
+        description: Total pull requests from previous month (NULL for first month)
+      - name: prev_month_merged
+        description: Total merged PRs from previous month (NULL for first month)
+      - name: month_over_month_change
+        description: Absolute change in PRs from previous month
+      - name: merged_month_over_month_change
+        description: Absolute change in merged PRs from previous month
+      - name: month_over_month_pct_change
+        description: Percentage change in PRs from previous month (NULL if no previous month)
+      - name: three_month_avg_pulls
+        description: 3-month moving average of pull requests
+      - name: three_month_avg_merged
+        description: 3-month moving average of merged pull requests
+
+  - name: mart_github_pulls_time_to_merge
+    description: |
+      Detailed time-to-merge analysis for pull requests.
+      Shows individual PRs with their merge times in days and hours.
+      Only includes merged or closed PRs.
+    columns:
+      - name: user_login
+        description: GitHub username who created the PR
+        tests:
+          - not_null
+      - name: repo_name
+        description: Repository name
+        tests:
+          - not_null
+      - name: pr_id
+        description: Pull request ID
+        tests:
+          - not_null
+      - name: state
+        description: State of the pull request
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['open', 'closed']
+      - name: created_at
+        description: Timestamp when PR was created
+        tests:
+          - not_null
+      - name: merged_at
+        description: Timestamp when PR was merged (NULL if not merged)
+      - name: days_to_merge
+        description: Number of days from creation to merge (NULL if not merged)
+      - name: hours_to_merge
+        description: Number of hours from creation to merge (NULL if not merged)
+      - name: pr_status
+        description: Status of the PR - 'merged', 'closed_not_merged', or 'open'
+        tests:
+          - accepted_values:
+              values: ['merged', 'closed_not_merged', 'open']
+
+  - name: mart_github_pulls_activity_patterns
+    description: |
+      Activity patterns by day of week and month for pull requests.
+      Helps identify when users are most active creating PRs (e.g., weekdays vs weekends, seasonal patterns).
+    columns:
+      - name: user_login
+        description: GitHub username
+        tests:
+          - not_null
+      - name: day_of_week
+        description: Name of the day of week (e.g., 'Monday   ')
+      - name: day_of_week_num
+        description: Numeric day of week (0=Sunday, 6=Saturday)
+      - name: month_name
+        description: Name of the month (e.g., 'January     ')
+      - name: month_num
+        description: Numeric month (1-12)
+      - name: total_pulls
+        description: Total pull requests for this day/month combination
+      - name: merged_pulls
+        description: Merged pull requests for this day/month combination
+      - name: open_pulls
+        description: Open pull requests for this day/month combination
+
+  - name: mart_github_pulls_recent_activity
+    description: |
+      Recent pull request activity with rolling 30-day windows.
+      Only includes data from the last 90 days for performance.
+      Useful for dashboards and real-time activity monitoring.
+    columns:
+      - name: user_login
+        description: GitHub username
+        tests:
+          - not_null
+      - name: repo_name
+        description: Repository name
+        tests:
+          - not_null
+      - name: pr_id
+        description: Pull request ID
+        tests:
+          - not_null
+      - name: state
+        description: State of the pull request
+        tests:
+          - not_null
+      - name: created_at
+        description: Timestamp when PR was created
+        tests:
+          - not_null
+      - name: merged_at
+        description: Timestamp when PR was merged (NULL if not merged)
+      - name: days_to_merge
+        description: Number of days from creation to merge (NULL if not merged)
+      - name: pulls_last_30_days
+        description: Rolling count of PRs created by user in last 30 days (including current)
+      - name: merged_last_30_days
+        description: Rolling count of merged PRs by user in last 30 days (including current)
+
