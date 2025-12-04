@@ -85,7 +85,7 @@ def github_to_postgres_and_dbt():
         target_table = "raw_github_pulls"
         target_columns = ["repo_name", "pr_id", "state", "created_at", "merged_at", "user_login"]
 
-        # Insert rows, using 'pr_id' for replace/upsert logic
+        # Insert rows, using 'pr_id' for replace/upsert pk logic
         postgres_hook.insert_rows(
             table=target_table,
             rows=data,
@@ -117,8 +117,7 @@ def github_to_postgres_and_dbt():
     # Transformation
     run_dbt_models = BashOperator(
         task_id='run_dbt_transformations',
-        bash_command=f
-                """
+        bash_command=f"""
                     OUTPUT=$(docker exec dbt_cli dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt)
                     echo "$OUTPUT"
                     
