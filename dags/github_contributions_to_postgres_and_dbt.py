@@ -8,6 +8,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.bash import BashOperator
 from typing import List, Tuple, Any, Set
 from datetime import timedelta
+from utils.table_provisioning import create_raw_github_contributions_table
 
 # --- CONFIGURATION ---
 POSTGRES_CONN_ID = "postgres_default"
@@ -40,32 +41,6 @@ def find_contribution_dicts(data):
     tags=["github", "contributions", "elt"],
 )
 def github_contributions_to_postgres():
-    
-    @task
-    def create_table_if_not_exists():
-        """Creates the raw_github_contributions table if it doesn't exist."""
-        postgres_hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
-        conn = postgres_hook.get_conn()
-        cursor = conn.cursor()
-        
-        try:
-            create_table_sql = """
-                CREATE TABLE IF NOT EXISTS raw_github_contributions (
-                    username VARCHAR(255) NOT NULL,
-                    date DATE NOT NULL,
-                    contribution_count INTEGER NOT NULL,
-                    PRIMARY KEY (username, date)
-                );
-            """
-            cursor.execute(create_table_sql)
-            conn.commit()
-            print("Table raw_github_contributions created or already exists.")
-        except Exception as e:
-            conn.rollback()
-            raise Exception(f"Error creating table: {e}")
-        finally:
-            cursor.close()
-            conn.close()
     
     @task
     def get_existing_dates(username: str) -> Set[str]:
@@ -226,7 +201,7 @@ def github_contributions_to_postgres():
             conn.close()
 
     # Create table first
-    create_table = create_table_if_not_exists()
+    create_table = create_raw_github_contributions_table(postgres_conn_id=POSTGRES_CONN_ID)()
     
     # Extract and Load in Parallel for all usernames
     all_load_tasks = []

@@ -6,6 +6,7 @@ from airflow.providers.http.hooks.http import HttpHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.bash import BashOperator 
 from typing import List, Tuple, Any
+from utils.table_provisioning import create_raw_github_pulls_table
 
 # --- CONFIGURATION ---
 GITHUB_CONN_ID = "github_api_conn"
@@ -27,35 +28,6 @@ MY_PROJECTS = [
     tags=["github", "dbt", "elt"],
 )
 def github_to_postgres_and_dbt():
-    
-    @task
-    def create_table_if_not_exists():
-        """Creates the raw_github_pulls table if it doesn't exist."""
-        postgres_hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
-        conn = postgres_hook.get_conn()
-        cursor = conn.cursor()
-        
-        try:
-            create_table_sql = """
-                CREATE TABLE IF NOT EXISTS raw_github_pulls (
-                    repo_name VARCHAR(255) NOT NULL,
-                    pr_id BIGINT NOT NULL,
-                    state VARCHAR(50),
-                    created_at TIMESTAMP,
-                    merged_at TIMESTAMP,
-                    user_login VARCHAR(255),
-                    PRIMARY KEY (pr_id)
-                );
-            """
-            cursor.execute(create_table_sql)
-            conn.commit()
-            print("Table raw_github_pulls created or already exists.")
-        except Exception as e:
-            conn.rollback()
-            raise Exception(f"Error creating table: {e}")
-        finally:
-            cursor.close()
-            conn.close()
     
     @task
     def extract_pull_requests(conn_id: str, repo: str) -> List[Tuple[Any, ...]]:
@@ -126,7 +98,7 @@ def github_to_postgres_and_dbt():
         print(f"Successfully loaded {len(data)} unique records into {target_table}.")
 
     # Always try to create table first
-    create_table = create_table_if_not_exists()
+    create_table = create_raw_github_pulls_table(postgres_conn_id=POSTGRES_CONN_ID)()
     
     #  Extract and Load in Parallel
     all_load_tasks = []
