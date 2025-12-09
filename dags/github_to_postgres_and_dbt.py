@@ -29,6 +29,35 @@ MY_PROJECTS = [
 def github_to_postgres_and_dbt():
     
     @task
+    def create_table_if_not_exists():
+        """Creates the raw_github_pulls table if it doesn't exist."""
+        postgres_hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        conn = postgres_hook.get_conn()
+        cursor = conn.cursor()
+        
+        try:
+            create_table_sql = """
+                CREATE TABLE IF NOT EXISTS raw_github_pulls (
+                    repo_name VARCHAR(255) NOT NULL,
+                    pr_id BIGINT NOT NULL,
+                    state VARCHAR(50),
+                    created_at TIMESTAMP,
+                    merged_at TIMESTAMP,
+                    user_login VARCHAR(255),
+                    PRIMARY KEY (pr_id)
+                );
+            """
+            cursor.execute(create_table_sql)
+            conn.commit()
+            print("Table raw_github_pulls created or already exists.")
+        except Exception as e:
+            conn.rollback()
+            raise Exception(f"Error creating table: {e}")
+        finally:
+            cursor.close()
+            conn.close()
+    
+    @task
     def extract_pull_requests(conn_id: str, repo: str) -> List[Tuple[Any, ...]]:
         """
         Extracts closed PR data for a specific repository using the GitHub API token.
@@ -96,6 +125,9 @@ def github_to_postgres_and_dbt():
         
         print(f"Successfully loaded {len(data)} unique records into {target_table}.")
 
+    # Always try to create table first
+    create_table = create_table_if_not_exists()
+    
     #  Extract and Load in Parallel
     all_load_tasks = []
 
@@ -113,6 +145,9 @@ def github_to_postgres_and_dbt():
             data=raw_pulls
         )
         all_load_tasks.append(load_task)
+        
+        # Set dependency: create_table -> extract -> load
+        create_table >> raw_pulls >> load_task
 
     # Transformation
     run_dbt_models = BashOperator(

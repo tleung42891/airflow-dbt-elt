@@ -26,6 +26,35 @@ MY_PROJECTS = [
 def github_multi_project_pipeline():
     
     @task
+    def create_table_if_not_exists():
+        """Creates the raw_github_pulls table if it doesn't exist."""
+        postgres_hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        conn = postgres_hook.get_conn()
+        cursor = conn.cursor()
+        
+        try:
+            create_table_sql = """
+                CREATE TABLE IF NOT EXISTS raw_github_pulls (
+                    repo_name VARCHAR(255) NOT NULL,
+                    pr_id BIGINT NOT NULL,
+                    state VARCHAR(50),
+                    created_at TIMESTAMP,
+                    merged_at TIMESTAMP,
+                    user_login VARCHAR(255),
+                    PRIMARY KEY (pr_id)
+                );
+            """
+            cursor.execute(create_table_sql)
+            conn.commit()
+            print("Table raw_github_pulls created or already exists.")
+        except Exception as e:
+            conn.rollback()
+            raise Exception(f"Error creating table: {e}")
+        finally:
+            cursor.close()
+            conn.close()
+    
+    @task
     def extract_pull_requests(conn_id: str, repo: str) -> List[Tuple[Any, ...]]:
         """
         Extracts PR data, includes the repo name, and accesses the token correctly.
@@ -93,6 +122,9 @@ def github_multi_project_pipeline():
         
         print(f"Successfully loaded {len(data)} unique records into {target_table}.")
 
+    # Always try to create table first
+    create_table = create_table_if_not_exists()
+    
     # Loops through all projects
     for project in MY_PROJECTS:
         # Override task_id to ensure unique names for each iteration
@@ -101,8 +133,11 @@ def github_multi_project_pipeline():
             conn_id=GITHUB_CONN_ID, 
             repo=project
         )
-        load_raw_data.override(task_id=f"load_{repo_name_safe}")(
+        load_task = load_raw_data.override(task_id=f"load_{repo_name_safe}")(
             data=raw_pulls
         )
+        
+        # Set dependencies
+        create_table >> raw_pulls >> load_task
 
 github_multi_project_pipeline()
