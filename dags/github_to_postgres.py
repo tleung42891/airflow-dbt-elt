@@ -5,6 +5,7 @@ from airflow.decorators import dag, task
 from airflow.providers.http.hooks.http import HttpHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from typing import List, Tuple, Any
+from utils.table_provisioning import create_raw_github_pulls_table
 
 GITHUB_CONN_ID = "github_api_conn"
 POSTGRES_CONN_ID = "postgres_default" 
@@ -93,6 +94,9 @@ def github_multi_project_pipeline():
         
         print(f"Successfully loaded {len(data)} unique records into {target_table}.")
 
+    # Always try to create table first
+    create_table = create_raw_github_pulls_table(postgres_conn_id=POSTGRES_CONN_ID)()
+    
     # Loops through all projects
     for project in MY_PROJECTS:
         # Override task_id to ensure unique names for each iteration
@@ -101,8 +105,11 @@ def github_multi_project_pipeline():
             conn_id=GITHUB_CONN_ID, 
             repo=project
         )
-        load_raw_data.override(task_id=f"load_{repo_name_safe}")(
+        load_task = load_raw_data.override(task_id=f"load_{repo_name_safe}")(
             data=raw_pulls
         )
+        
+        # Set dependencies
+        create_table >> raw_pulls >> load_task
 
 github_multi_project_pipeline()

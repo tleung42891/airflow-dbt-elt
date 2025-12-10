@@ -6,6 +6,7 @@ from airflow.providers.http.hooks.http import HttpHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.bash import BashOperator 
 from typing import List, Tuple, Any
+from utils.table_provisioning import create_raw_github_pulls_table
 
 # --- CONFIGURATION ---
 GITHUB_CONN_ID = "github_api_conn"
@@ -96,6 +97,9 @@ def github_to_postgres_and_dbt():
         
         print(f"Successfully loaded {len(data)} unique records into {target_table}.")
 
+    # Always try to create table first
+    create_table = create_raw_github_pulls_table(postgres_conn_id=POSTGRES_CONN_ID)()
+    
     #  Extract and Load in Parallel
     all_load_tasks = []
 
@@ -113,6 +117,9 @@ def github_to_postgres_and_dbt():
             data=raw_pulls
         )
         all_load_tasks.append(load_task)
+        
+        # Set dependency: create_table -> extract -> load
+        create_table >> raw_pulls >> load_task
 
     # Transformation
     run_dbt_models = BashOperator(
