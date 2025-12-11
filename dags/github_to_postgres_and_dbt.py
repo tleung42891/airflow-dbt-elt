@@ -7,6 +7,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.bash import BashOperator 
 from typing import List, Tuple, Any
 from utils.table_provisioning import create_raw_github_pulls_table
+from utils.insert_utils import load_data_with_config
 
 # --- CONFIGURATION ---
 GITHUB_CONN_ID = "github_api_conn"
@@ -76,26 +77,13 @@ def github_to_postgres_and_dbt():
 
     @task
     def load_raw_data(data: List[Tuple[Any, ...]]):
-        """Loads the extracted records into the raw PostgreSQL table using built-in upsert logic."""
-        if not data:
-            print("No data to load.")
-            return
-
+        """Loads the extracted records into the raw PostgreSQL table using YAML-configured upsert logic."""
         postgres_hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
-        
-        target_table = "raw_github_pulls"
-        target_columns = ["repo_name", "pr_id", "state", "created_at", "merged_at", "user_login"]
-
-        # Insert rows, using 'pr_id' for replace/upsert pk logic
-        postgres_hook.insert_rows(
-            table=target_table,
-            rows=data,
-            target_fields=target_columns,
-            replace=True, 
-            replace_index="pr_id"
+        load_data_with_config(
+            postgres_hook=postgres_hook,
+            table_name="raw_github_pulls",
+            data=data
         )
-        
-        print(f"Successfully loaded {len(data)} unique records into {target_table}.")
 
     # Always try to create table first
     create_table = create_raw_github_pulls_table(postgres_conn_id=POSTGRES_CONN_ID)()
