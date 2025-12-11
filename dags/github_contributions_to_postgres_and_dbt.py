@@ -9,6 +9,7 @@ from airflow.operators.bash import BashOperator
 from typing import List, Tuple, Any, Set
 from datetime import timedelta
 from utils.table_provisioning import create_raw_github_contributions_table
+from utils.insert_utils import load_data_with_config
 
 # --- CONFIGURATION ---
 POSTGRES_CONN_ID = "postgres_default"
@@ -167,38 +168,13 @@ def github_contributions_to_postgres():
 
     @task
     def load_raw_data(data: List[Tuple[Any, ...]]):
-        """Loads the extracted records into the raw PostgreSQL table using upsert logic."""
-        if not data:
-            print("No data to load.")
-            return
-
+        """Loads the extracted records into the raw PostgreSQL table using YAML-configured upsert logic."""
         postgres_hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
-        
-        target_table = "raw_github_contributions"
-        
-        # Get the connection and cursor
-        conn = postgres_hook.get_conn()
-        cursor = conn.cursor()
-        
-        try:
-            # Use INSERT ... ON CONFLICT for upsert with composite key (user, date)
-            upsert_sql = f"""
-                INSERT INTO {target_table} (username, date, contribution_count)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (username, date) 
-                DO UPDATE SET contribution_count = EXCLUDED.contribution_count
-            """
-            
-            cursor.executemany(upsert_sql, data)
-            conn.commit()
-            
-            print(f"Successfully loaded {len(data)} records into {target_table}.")
-        except Exception as e:
-            conn.rollback()
-            raise Exception(f"Error loading data into {target_table}: {e}")
-        finally:
-            cursor.close()
-            conn.close()
+        load_data_with_config(
+            postgres_hook=postgres_hook,
+            table_name="raw_github_contributions",
+            data=data
+        )
 
     # Create table first
     create_table = create_raw_github_contributions_table(postgres_conn_id=POSTGRES_CONN_ID)()

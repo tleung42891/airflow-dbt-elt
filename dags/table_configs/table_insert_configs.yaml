@@ -1,0 +1,30 @@
+# Defines INSERT/UPSERT patterns for all tables in the DAGs
+
+tables:
+  raw_github_contributions:
+    columns:
+      - username
+      - date
+      - contribution_count
+    upsert:
+      type: on_conflict
+      conflict_keys:
+        - username
+        - date
+      update_fields:
+        contribution_count: EXCLUDED.contribution_count
+    method: executemany
+
+  raw_github_pulls:
+    columns:
+      - repo_name
+      - pr_id
+      - state
+      - created_at
+      - merged_at
+      - user_login
+    upsert:
+      type: replace_index
+      conflict_key: pr_id
+    method: insert_rows
+
