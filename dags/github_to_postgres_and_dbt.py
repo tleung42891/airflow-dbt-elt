@@ -6,7 +6,7 @@ from airflow.providers.http.hooks.http import HttpHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.bash import BashOperator 
 from typing import List, Tuple, Any
-from utils.table_provisioning import create_raw_github_pulls_table
+from utils.table_provisioning import create_table_if_not_exists
 from utils.insert_utils import load_data_with_config
 
 # --- CONFIGURATION ---
@@ -86,7 +86,10 @@ def github_to_postgres_and_dbt():
         )
 
     # Always try to create table first
-    create_table = create_raw_github_pulls_table(postgres_conn_id=POSTGRES_CONN_ID)()
+    create_table_task = create_table_if_not_exists(
+        table_name="raw_github_pulls",
+        postgres_conn_id=POSTGRES_CONN_ID
+    )()
     
     #  Extract and Load in Parallel
     all_load_tasks = []
@@ -106,8 +109,8 @@ def github_to_postgres_and_dbt():
         )
         all_load_tasks.append(load_task)
         
-        # Set dependency: create_table -> extract -> load
-        create_table >> raw_pulls >> load_task
+        # Set dependency: create_table_if_not_exists -> extract -> load
+        create_table_task >> raw_pulls >> load_task
 
     # Transformation
     run_dbt_models = BashOperator(

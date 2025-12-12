@@ -5,7 +5,7 @@ from airflow.decorators import dag, task
 from airflow.providers.http.hooks.http import HttpHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from typing import List, Tuple, Any
-from utils.table_provisioning import create_raw_github_pulls_table
+from utils.table_provisioning import create_table_if_not_exists
 from utils.insert_utils import load_data_with_config
 
 GITHUB_CONN_ID = "github_api_conn"
@@ -83,7 +83,10 @@ def github_multi_project_pipeline():
         )
 
     # Always try to create table first
-    create_table = create_raw_github_pulls_table(postgres_conn_id=POSTGRES_CONN_ID)()
+    create_table_task = create_table_if_not_exists(
+        table_name="raw_github_pulls",
+        postgres_conn_id=POSTGRES_CONN_ID
+    )()
     
     # Loops through all projects
     for project in MY_PROJECTS:
@@ -98,6 +101,6 @@ def github_multi_project_pipeline():
         )
         
         # Set dependencies
-        create_table >> raw_pulls >> load_task
+        create_table_task >> raw_pulls >> load_task
 
 github_multi_project_pipeline()

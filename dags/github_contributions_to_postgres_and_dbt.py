@@ -8,7 +8,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.bash import BashOperator
 from typing import List, Tuple, Any, Set
 from datetime import timedelta
-from utils.table_provisioning import create_raw_github_contributions_table
+from utils.table_provisioning import create_table_if_not_exists
 from utils.insert_utils import load_data_with_config
 
 # --- CONFIGURATION ---
@@ -177,7 +177,10 @@ def github_contributions_to_postgres():
         )
 
     # Create table first
-    create_table = create_raw_github_contributions_table(postgres_conn_id=POSTGRES_CONN_ID)()
+    create_table_task = create_table_if_not_exists(
+        table_name="raw_github_contributions",
+        postgres_conn_id=POSTGRES_CONN_ID
+    )()
     
     # Extract and Load in Parallel for all usernames
     all_load_tasks = []
@@ -202,8 +205,8 @@ def github_contributions_to_postgres():
         )
         all_load_tasks.append(load_task)
         
-        # Set dependencies: create_table -> get_existing_dates -> extract -> load
-        create_table >> existing_dates >> contributions >> load_task
+        # Set dependencies: create_table_if_not_exists -> get_existing_dates -> extract -> load
+        create_table_task >> existing_dates >> contributions >> load_task
 
     # Transformation
     run_dbt_models = BashOperator(

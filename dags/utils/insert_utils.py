@@ -75,7 +75,18 @@ def load_data_with_config(
     
     # Load configuration
     config = load_table_config(table_name)
-    columns = config['columns']
+    
+    # Derive columns from schema if not explicitly defined
+    if 'columns' in config:
+        columns = config['columns']
+    elif 'schema' in config and 'columns' in config['schema']:
+        # Derive column list from schema definition
+        columns = list(config['schema']['columns'].keys())
+    else:
+        raise ValueError(
+            f"Table '{table_name}' must have either 'columns' list or 'schema.columns' definition"
+        )
+    
     method = config.get('method', 'executemany')
     upsert_config = config.get('upsert', {})
     
