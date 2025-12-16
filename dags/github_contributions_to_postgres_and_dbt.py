@@ -5,11 +5,11 @@ import datetime
 import requests
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.operators.bash import BashOperator
 from typing import List, Tuple, Any, Set
 from datetime import timedelta
 from utils.table_provisioning import create_table_if_not_exists
 from utils.insert_utils import load_data_with_config
+from utils.dbt_utils import create_dbt_run_task
 
 # --- CONFIGURATION ---
 POSTGRES_CONN_ID = "postgres_default"
@@ -209,20 +209,7 @@ def github_contributions_to_postgres():
         create_table_task >> existing_dates >> contributions >> load_task
 
     # Transformation
-    run_dbt_models = BashOperator(
-        task_id='run_dbt_transformations',
-        bash_command=f"""
-                    OUTPUT=$(docker exec dbt_cli dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt)
-                    echo "$OUTPUT"
-                    
-                    # Check if the output contains the "success line" and force a "Completed successfully"
-                    if echo "$OUTPUT" | grep -q "Completed successfully"; then
-                        exit 0 # Force success if the transformation completed
-                    else
-                        exit 1 # Fail otherwise
-                    fi
-                """,
-    )
+    run_dbt_models = create_dbt_run_task()
 
     # The dbt transformation waits for all parallel load tasks to complete successfully.
     all_load_tasks >> run_dbt_models
