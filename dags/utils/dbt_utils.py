@@ -4,7 +4,6 @@ Utility functions for running dbt transformations in Airflow DAGs.
 from airflow.operators.bash import BashOperator
 from typing import Optional
 
-
 def create_dbt_run_task(
     task_id: str = 'run_dbt_transformations',
     full_refresh: Optional[bool] = False,
@@ -33,9 +32,10 @@ def create_dbt_run_task(
         # Use Airflow params
         create_dbt_run_task(full_refresh=None)  # Reads from {{ params.full_refresh }}
     """
+    # Build the flag initialization logic conditionally
     if full_refresh is None:
         # Use Airflow params template
-        bash_command = f"""
+        flag_init = """
                     # Check if full_refresh parameter is set to true
                     FULL_REFRESH_FLAG=""
                     if [ "{{{{ params.full_refresh }}}}" == "True" ] || [ "{{{{ params.full_refresh }}}}" == "true" ]; then
@@ -44,23 +44,18 @@ def create_dbt_run_task(
                     else
                         echo "Running dbt in incremental mode (no --full-refresh)"
                     fi
-                    
-                    OUTPUT=$(docker exec {docker_container} dbt run $FULL_REFRESH_FLAG --profiles-dir {profiles_dir} --project-dir {project_dir})
-                    echo "$OUTPUT"
-                    
-                    # Check if the output contains the "success line" and force a "Completed successfully"
-                    if echo "$OUTPUT" | grep -q "Completed successfully"; then
-                        exit 0 # Force success if the transformation completed
-                    else
-                        exit 1 # Fail otherwise
-                    fi
-                """
+                    """
+        flag_var = "$FULL_REFRESH_FLAG"
     else:
         # Use direct boolean value
-        full_refresh_flag = "--full-refresh" if full_refresh else ""
-        
-        bash_command = f"""
-                    OUTPUT=$(docker exec {docker_container} dbt run {full_refresh_flag} --profiles-dir {profiles_dir} --project-dir {project_dir})
+        flag_value = "--full-refresh" if full_refresh else ""
+        flag_init = ""
+        flag_var = flag_value
+    
+    # Single bash command template
+    bash_command = f"""
+                    {flag_init}
+                    OUTPUT=$(docker exec {docker_container} dbt run {flag_var} --profiles-dir {profiles_dir} --project-dir {project_dir})
                     echo "$OUTPUT"
                     
                     # Check if the output contains the "success line" and force a "Completed successfully"
