@@ -1,126 +1,6 @@
 version: 2
 
 models:
-  - name: mart_github_contributions_weekly
-    description: |
-      Weekly aggregated GitHub contribution statistics per user.
-      Provides weekly totals, averages, and activity metrics for tracking weekly performance.
-    columns:
-      - name: username
-        description: GitHub username
-        tests:
-          - not_null
-      - name: week_start
-        description: Start date of the week (Monday)
-        tests:
-          - not_null
-      - name: days_with_contributions
-        description: Number of days in the week with contributions
-      - name: total_contributions
-        description: Total contributions for the week
-        tests:
-          - not_null
-      - name: avg_daily_contributions
-        description: Average daily contributions for the week
-      - name: max_daily_contributions
-        description: Maximum single-day contributions in the week
-      - name: min_daily_contributions
-        description: Minimum single-day contributions in the week
-
-  - name: mart_github_contributions_monthly
-    description: |
-      Monthly aggregated GitHub contribution statistics per user.
-      Includes contribution rate percentage showing activity consistency within each month.
-    columns:
-      - name: username
-        description: GitHub username
-        tests:
-          - not_null
-      - name: month_start
-        description: First day of the month
-        tests:
-          - not_null
-      - name: month_label
-        description: Month in YYYY-MM format
-      - name: days_with_contributions
-        description: Number of days in the month with contributions
-      - name: total_contributions
-        description: Total contributions for the month
-        tests:
-          - not_null
-      - name: avg_daily_contributions
-        description: Average daily contributions for the month
-      - name: max_daily_contributions
-        description: Maximum single-day contributions in the month
-      - name: min_daily_contributions
-        description: Minimum single-day contributions in the month
-      - name: contribution_rate_percent
-        description: Percentage of days in the month with contributions (0-100)
-
-  - name: mart_github_contributions_user_summary
-    description: |
-      Comprehensive user-level summary statistics for GitHub contributions.
-      Provides overall metrics including total contributions, activity rates, and recency metrics.
-    columns:
-      - name: username
-        description: GitHub username
-        tests:
-          - not_null
-          - unique
-      - name: total_days_with_contributions
-        description: Total number of days with contributions across all time
-      - name: first_contribution_date
-        description: Date of first recorded contribution
-      - name: last_contribution_date
-        description: Date of most recent contribution
-      - name: total_contributions
-        description: Total contributions across all time
-        tests:
-          - not_null
-      - name: avg_daily_contributions
-        description: Average contributions per day (only counting days with contributions)
-      - name: max_daily_contributions
-        description: Maximum contributions in a single day
-      - name: stddev_daily_contributions
-        description: Standard deviation of daily contributions (measures consistency)
-      - name: total_days_in_range
-        description: Total days between first and last contribution (inclusive)
-      - name: overall_activity_rate_percent
-        description: Overall activity rate - percentage of days with contributions (0-100)
-      - name: days_since_last_contribution
-        description: Number of days since the last contribution (recency metric)
-
-  - name: mart_github_contributions_streaks
-    description: |
-      Identifies and tracks contribution streaks (consecutive days with contributions).
-      Only includes streaks of 3+ days. Useful for measuring consistency and engagement.
-    columns:
-      - name: username
-        description: GitHub username
-        tests:
-          - not_null
-      - name: streak_start
-        description: Start date of the contribution streak
-        tests:
-          - not_null
-      - name: streak_end
-        description: End date of the contribution streak
-        tests:
-          - not_null
-      - name: streak_length_days
-        description: Length of the streak in days
-        tests:
-          - not_null
-      - name: streak_total_contributions
-        description: Total contributions during the streak
-      - name: streak_avg_contributions
-        description: Average daily contributions during the streak
-      - name: streak_status
-        description: Status of the streak - 'active' if ongoing, 'ended' if completed
-        tests:
-          - accepted_values:
-              values: ['active', 'ended']
-
   - name: mart_github_contributions_activity_patterns
     description: |
       Activity patterns by day of week and month.
@@ -182,10 +62,10 @@ models:
           Lower score = better ranking.
           Formula: (rank_by_total * 0.5) + (rank_by_avg * 0.3) + (rank_by_consistency * 0.2)
 
-  - name: mart_github_contributions_trends
+  - name: mart_github_contributions_monthly
     description: |
-      Month-over-month trends and growth metrics for GitHub contributions.
-      Includes month-over-month changes, percentage changes, and 3-month moving averages.
+      Monthly aggregated GitHub contribution statistics per user.
+      Includes contribution rate percentage showing activity consistency within each month.
     columns:
       - name: username
         description: GitHub username
@@ -195,18 +75,22 @@ models:
         description: First day of the month
         tests:
           - not_null
-      - name: monthly_contributions
+      - name: month_label
+        description: Month in YYYY-MM format
+      - name: days_with_contributions
+        description: Number of days in the month with contributions
+      - name: total_contributions
         description: Total contributions for the month
         tests:
           - not_null
-      - name: prev_month_contributions
-        description: Total contributions for the previous month (NULL for first month)
-      - name: month_over_month_change
-        description: Absolute change in contributions from previous month
-      - name: month_over_month_pct_change
-        description: Percentage change in contributions from previous month (NULL if no previous month)
-      - name: three_month_avg
-        description: 3-month moving average of contributions
+      - name: avg_daily_contributions
+        description: Average daily contributions for the month
+      - name: max_daily_contributions
+        description: Maximum single-day contributions in the month
+      - name: min_daily_contributions
+        description: Minimum single-day contributions in the month
+      - name: contribution_rate_percent
+        description: Percentage of days in the month with contributions (0-100)
 
   - name: mart_github_contributions_recent_activity
     description: |
@@ -235,3 +119,118 @@ models:
       - name: avg_contributions_last_30_days
         description: Rolling average of contributions over the last 30 days
 
+  - name: mart_github_contributions_streaks
+    description: |
+      Identifies and tracks contribution streaks (consecutive days with contributions).
+      Only includes streaks of 3+ days. Useful for measuring consistency and engagement.
+    columns:
+      - name: username
+        description: GitHub username
+        tests:
+          - not_null
+      - name: streak_start
+        description: Start date of the contribution streak
+        tests:
+          - not_null
+      - name: streak_end
+        description: End date of the contribution streak
+        tests:
+          - not_null
+      - name: streak_length_days
+        description: Length of the streak in days
+        tests:
+          - not_null
+      - name: streak_total_contributions
+        description: Total contributions during the streak
+      - name: streak_avg_contributions
+        description: Average daily contributions during the streak
+      - name: streak_status
+        description: Status of the streak - 'active' if ongoing, 'ended' if completed
+        tests:
+          - accepted_values:
+              values: ['active', 'ended']
+
+  - name: mart_github_contributions_trends
+    description: |
+      Month-over-month trends and growth metrics for GitHub contributions.
+      Includes month-over-month changes, percentage changes, and 3-month moving averages.
+    columns:
+      - name: username
+        description: GitHub username
+        tests:
+          - not_null
+      - name: month_start
+        description: First day of the month
+        tests:
+          - not_null
+      - name: monthly_contributions
+        description: Total contributions for the month
+        tests:
+          - not_null
+      - name: prev_month_contributions
+        description: Total contributions for the previous month (NULL for first month)
+      - name: month_over_month_change
+        description: Absolute change in contributions from previous month
+      - name: month_over_month_pct_change
+        description: Percentage change in contributions from previous month (NULL if no previous month)
+      - name: three_month_avg
+        description: 3-month moving average of contributions
+
+  - name: mart_github_contributions_user_summary
+    description: |
+      Comprehensive user-level summary statistics for GitHub contributions.
+      Provides overall metrics including total contributions, activity rates, and recency metrics.
+    columns:
+      - name: username
+        description: GitHub username
+        tests:
+          - not_null
+          - unique
+      - name: total_days_with_contributions
+        description: Total number of days with contributions across all time
+      - name: first_contribution_date
+        description: Date of first recorded contribution
+      - name: last_contribution_date
+        description: Date of most recent contribution
+      - name: total_contributions
+        description: Total contributions across all time
+        tests:
+          - not_null
+      - name: avg_daily_contributions
+        description: Average contributions per day (only counting days with contributions)
+      - name: max_daily_contributions
+        description: Maximum contributions in a single day
+      - name: stddev_daily_contributions
+        description: Standard deviation of daily contributions (measures consistency)
+      - name: total_days_in_range
+        description: Total days between first and last contribution (inclusive)
+      - name: overall_activity_rate_percent
+        description: Overall activity rate - percentage of days with contributions (0-100)
+      - name: days_since_last_contribution
+        description: Number of days since the last contribution (recency metric)
+
+  - name: mart_github_contributions_weekly
+    description: |
+      Weekly aggregated GitHub contribution statistics per user.
+      Provides weekly totals, averages, and activity metrics for tracking weekly performance.
+    columns:
+      - name: username
+        description: GitHub username
+        tests:
+          - not_null
+      - name: week_start
+        description: Start date of the week (Monday)
+        tests:
+          - not_null
+      - name: days_with_contributions
+        description: Number of days in the week with contributions
+      - name: total_contributions
+        description: Total contributions for the week
+        tests:
+          - not_null
+      - name: avg_daily_contributions
+        description: Average daily contributions for the week
+      - name: max_daily_contributions
+        description: Maximum single-day contributions in the week
+      - name: min_daily_contributions
+        description: Minimum single-day contributions in the week
