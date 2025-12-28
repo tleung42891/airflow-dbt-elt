@@ -27,3 +27,53 @@ sources:
           - name: username
           - name: date
           - name: contribution_count
+
+  - name: customers
+    schema: public
+    tables:
+      - name: raw_customers
+        identifier: raw_customers
+        columns:
+          - name: id
+            tests:
+              - unique
+              - not_null
+          - name: signup_date
+            tests:
+              - not_null
+          - name: status
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['active', 'canceled']
+          - name: region
+      - name: raw_plans
+        identifier: raw_plans
+        columns:
+          - name: id
+            tests:
+              - unique
+              - not_null
+          - name: plan_name
+            tests:
+              - not_null
+          - name: monthly_price
+            tests:
+              - not_null
+      - name: raw_subscriptions
+        identifier: raw_subscriptions
+        columns:
+          - name: id
+            tests:
+              - unique
+              - not_null
+          - name: customer_id
+            tests:
+              - not_null
+          - name: plan_id
+            tests:
+              - not_null
+          - name: start_date
+            tests:
+              - not_null
+          - name: end_date

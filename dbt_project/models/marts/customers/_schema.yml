@@ -1,0 +1,63 @@
+version: 2
+
+models:
+  - name: mart_active_customers_monthly
+    description: Monthly metrics for active customers by region. Provides counts of active customers, new customers, and churned customers per month using subscription data.
+    columns:
+      - name: month_start
+        tests:
+          - not_null
+      - name: month_label
+        tests:
+          - not_null
+      - name: region
+        tests:
+          - not_null
+      - name: active_customers
+        tests:
+          - not_null
+      - name: new_customers
+      - name: churned_customers
+
+  - name: mart_mrr_monthly
+    description: Monthly Recurring Revenue (MRR) metrics by region. Calculates total MRR, new MRR, and churned MRR based on actual subscription and plan pricing data.
+    columns:
+      - name: month_start
+        tests:
+          - not_null
+      - name: month_label
+        tests:
+          - not_null
+      - name: region
+        tests:
+          - not_null
+      - name: active_customers
+        tests:
+          - not_null
+      - name: active_subscriptions
+        tests:
+          - not_null
+      - name: total_mrr
+        tests:
+          - not_null
+      - name: new_mrr
+      - name: churned_mrr
+      - name: avg_mrr_per_customer
+
+  - name: mart_churn_monthly
+    description: Monthly Logo Churn metrics by region. Tracks the number of customers who canceled in each month and calculates churn rate using customer status changes.
+    columns:
+      - name: month_start
+        tests:
+          - not_null
+      - name: month_label
+        tests:
+          - not_null
+      - name: region
+        tests:
+          - not_null
+      - name: churned_customers
+        tests:
+          - not_null
+      - name: churn_rate_percent
+
