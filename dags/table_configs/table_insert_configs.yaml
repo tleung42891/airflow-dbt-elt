@@ -24,6 +24,8 @@ tables:
       update_fields:
         contribution_count: EXCLUDED.contribution_count
     method: executemany
+    restatement_window: 7  # Number of days to look back in incremental mode
+    backfill_threshold: 30  # Minimum number of existing dates before switching to incremental mode
 
   raw_github_pulls:
     schema:

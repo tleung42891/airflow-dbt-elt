@@ -8,7 +8,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from typing import List, Tuple, Any, Set
 from datetime import timedelta
 from utils.table_provisioning import create_table_if_not_exists
-from utils.insert_utils import load_data_with_config
+from utils.insert_utils import load_data_with_config, load_table_config
 from utils.dbt_utils import create_dbt_run_task
 
 # --- CONFIGURATION ---
@@ -82,11 +82,14 @@ def github_contributions_to_postgres():
         """
         print(f"\n--- Fetching data for USER: {username} ---")
         
-        # If we have very few existing dates (< 30), do a full backfill. 
-        # Otherwise, do incremental (last 7 days) to catch new/missed days
+        # If we have very few existing dates (< backfill_threshold), do a full backfill. 
+        # Otherwise, do incremental (last N days based on restatement_window or default to 30 days if not specified)) to catch new/missed days
         today = datetime.datetime.now().date()
         
-        if len(existing_dates) < 30:
+        table_config = load_table_config("raw_github_contributions")
+        backfill_threshold = table_config.get("backfill_threshold", 30)
+        
+        if len(existing_dates) < backfill_threshold:
             # Full backfill: fetch all configured years
             date_ranges = []
             for year in YEARS_TO_FETCH:
@@ -97,11 +100,12 @@ def github_contributions_to_postgres():
                 date_ranges.append((year_start, year_end))
             print(f"  📅 Full backfill mode: {len(existing_dates)} existing dates, fetching all configured years")
         else:
-            # Incremental mode: fetch last 7 days to catch new days
-            start_date = today - timedelta(days=7)
+            # Incremental mode: fetch last N days (based on restatement_window or default to 7 days if not specified) to catch new days
+            restatement_window = table_config.get("restatement_window", 7)
+            start_date = today - timedelta(days=restatement_window)
             end_date = today
             date_ranges = [(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))]
-            print(f"  📅 Incremental mode: {len(existing_dates)} existing dates, fetching last 7 days ({start_date} to {end_date})")
+            print(f"  📅 Incremental mode: {len(existing_dates)} existing dates, fetching last {restatement_window} days ({start_date} to {end_date})")
         
         all_daily_contributions = {}
         api_base = BASE_API_URL.format(username=username)
