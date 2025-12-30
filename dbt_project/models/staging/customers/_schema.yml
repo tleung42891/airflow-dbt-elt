@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: Staging model that cleans and standardizes raw customer data, handling null regions and deduplicating by customer ID.
+    columns:
+      - name: id
+        tests:
+          - not_null
+          - unique
+      - name: signup_date
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['active', 'canceled']
+      - name: region
+        tests:
+          - not_null
+
+  - name: stg_plans
+    description: Staging model that cleans and standardizes plan pricing data, deduplicating by plan ID.
+    columns:
+      - name: id
+        tests:
+          - not_null
+          - unique
+      - name: plan_name
+        tests:
+          - not_null
+      - name: monthly_price
+        tests:
+          - not_null
+
+  - name: stg_subscriptions
+    description: Staging model that cleans and standardizes subscription data, linking customers to plans with start/end dates and deduplicating by subscription ID.
+    columns:
+      - name: id
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        tests:
+          - not_null
+      - name: plan_id
+        tests:
+          - not_null
+      - name: start_date
+        tests:
+          - not_null
+      - name: end_date
+

@@ -1,0 +1,71 @@
+version: 2
+
+models:
+  - name: int_subscription_snapshots
+    description: Intermediate model that creates monthly snapshots of subscriptions with pricing. Joins subscriptions with plans to get pricing and customers to get region, generating monthly records from subscription start to end date. This is the primary source for accurate MRR calculations.
+    columns:
+      - name: subscription_id
+        tests:
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+      - name: plan_id
+        tests:
+          - not_null
+      - name: start_date
+        tests:
+          - not_null
+      - name: end_date
+      - name: status
+        tests:
+          - not_null
+      - name: monthly_price
+        tests:
+          - not_null
+      - name: region
+        tests:
+          - not_null
+      - name: month_start
+        tests:
+          - not_null
+      - name: is_active_in_month
+        tests:
+          - not_null
+      - name: is_churned_this_month
+        tests:
+          - not_null
+      - name: mrr
+        tests:
+          - not_null
+
+  - name: int_customer_status_changes
+    description: Intermediate model that creates monthly snapshots of customer status. Uses subscription data when available, falling back to customer status. Generates a record for each customer-month combination from signup to current month.
+    columns:
+      - name: customer_id
+        tests:
+          - not_null
+      - name: signup_date
+        tests:
+          - not_null
+      - name: signup_month
+        tests:
+          - not_null
+      - name: region
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['active', 'canceled']
+      - name: month_start
+        tests:
+          - not_null
+      - name: is_active_in_month
+        tests:
+          - not_null
+      - name: is_churned_this_month
+        tests:
+          - not_null
+
