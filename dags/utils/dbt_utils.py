@@ -55,15 +55,7 @@ def create_dbt_run_task(
     # Single bash command template
     bash_command = f"""
                     {flag_init}
-                    OUTPUT=$(docker exec {docker_container} dbt run {flag_var} --profiles-dir {profiles_dir} --project-dir {project_dir})
-                    echo "$OUTPUT"
-                    
-                    # Check if the output contains the "success line" and force a "Completed successfully"
-                    if echo "$OUTPUT" | grep -q "Completed successfully"; then
-                        exit 0 # Force success if the transformation completed
-                    else
-                        exit 1 # Fail otherwise
-                    fi
+                    docker exec {docker_container} dbt run {flag_var} --profiles-dir {profiles_dir} --project-dir {project_dir}
                 """
     
     return BashOperator(
