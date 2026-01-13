@@ -65,3 +65,56 @@ docker run -d -p 3000:3000 --name metabase metabase/metabase
 ```
 
 Access Metabase at `http://localhost:3000` after it starts.
+
+### 4. Rebuild dbt Container (After Changes)
+
+If you modify the dbt Dockerfile or need to update dependencies:
+
+```bash
+docker-compose build dbt
+docker-compose up -d
+```
+
+## Configuration
+
+### dbt Configuration
+
+The dbt project is configured in `dbt_project/profiles.yml`. Ensure the connection details match your pg-warehouse container:
+
+```yaml
+postgres: 
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: pg-warehouse
+      user: postgres
+      password: mysecretpassword  # Update to match your container
+      port: 5432
+      dbname: postgres
+      schema: public
+```
+### Airflow Connections
+
+Configure the following connections in Airflow UI (Admin → Connections):
+
+1. **PostgreSQL Connection** (`postgres_default`):
+   - Connection Type: Postgres
+   - Host: `postgres` (for Airflow metadata)
+   - Schema: `airflow`
+   - Login: `airflow`
+   - Password: `airflow`
+   - Port: `5432`
+
+2. **GitHub API Connection** (`github_api_conn`):
+   - Connection Type: HTTP
+   - Host: `https://api.github.com`
+   - Extra: `{"token": "your_github_token"}`
+
+## Accessing Services
+
+- **Airflow Web UI**: http://localhost:8080
+  - Username: `airflow`
+  - Password: `airflow` (default)
+- **Metabase**: http://localhost:3000
+- **PostgreSQL (pg-warehouse)**: `localhost:5432`
