@@ -100,10 +100,10 @@ Configure the following connections in Airflow UI (Admin → Connections):
 
 1. **PostgreSQL Connection** (`postgres_default`):
    - Connection Type: Postgres
-   - Host: `postgres` (for Airflow metadata)
-   - Schema: `airflow`
-   - Login: `airflow`
-   - Password: `airflow`
+   - Host: `pg-warehouse`
+   - Schema: `public`
+   - Login: `postgres`
+   - Password: `mysecretpassword`
    - Port: `5432`
 
 2. **GitHub API Connection** (`github_api_conn`):
