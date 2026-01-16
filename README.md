@@ -9,6 +9,7 @@ The project consists of:
 - **PostgreSQL (Airflow DB)**: Stores Airflow metadata
 - **PostgreSQL (pg-warehouse)**: Data warehouse for GitHub data
 - **dbt**: Transforms raw data into analytics-ready models
+- **Elementary**: Data observability and quality monitoring (dbt package)
 - **Metabase**: Business intelligence and visualization tool (optional)
 - **Redis**: Message broker for Celery
 
@@ -66,7 +67,7 @@ docker run -d -p 3000:3000 --name metabase metabase/metabase
 
 Access Metabase at `http://localhost:3000` after it starts.
 
-### 4. Rebuild dbt Container (After Changes)
+### 4. Rebuild dbt Container (After Any Changes)
 
 If you modify the dbt Dockerfile or need to update dependencies:
 

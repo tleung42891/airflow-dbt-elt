@@ -3,6 +3,8 @@
 .DS_Store
 target/
 dbt_packages/
+edr_target/
+/dbt_project/package-lock.yml
 
 # --- Airflow ---
 logs/
