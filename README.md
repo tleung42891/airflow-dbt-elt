@@ -76,6 +76,36 @@ docker-compose build dbt
 docker-compose up -d
 ```
 
+### 5. Set Up Elementary (Data Observability)
+
+This project includes Elementary for data quality monitoring and observability.
+
+1. **Install dbt packages** (including Elementary):
+   ```bash
+   docker exec -it dbt_cli dbt deps --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
+   ```
+
+2. **Deploy Elementary models**:
+   ```bash
+   docker exec -it dbt_cli dbt run --select elementary --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
+   ```
+
+3. **Run Elementary tests**:
+   ```bash
+   docker exec -it dbt_cli dbt test --select elementary --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
+   ```
+
+4. **Generate Elementary CLI profile** (optional, for reporting):
+   ```bash
+   docker exec -it dbt_cli dbt run-operation elementary.generate_elementary_cli_profile --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
+   ```
+   Copy the output and add it to your `dbt_project/profiles.yml` if you want to use Elementary CLI reporting features.
+
+5. **Generate observability report** (using Elementary CLI):
+   ```bash
+   docker exec -it dbt_cli edr report --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
+   ```
+
 ## Configuration
 
 ### dbt Configuration
