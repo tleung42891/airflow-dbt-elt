@@ -149,3 +149,55 @@ Configure the following connections in Airflow UI (Admin → Connections):
   - Password: `airflow` (default)
 - **Metabase**: http://localhost:3000
 - **PostgreSQL (pg-warehouse)**: `localhost:5432`
+
+## Common Operations
+
+### Start All Services
+
+```bash
+docker-compose up -d
+```
+
+### Stop All Services
+
+```bash
+docker-compose down
+```
+
+### View Logs
+
+```bash
+docker-compose logs -f airflow-scheduler
+docker-compose logs -f airflow-webserver
+```
+
+### Rebuild dbt Container
+
+```bash
+docker-compose build dbt
+docker-compose up -d dbt
+```
+
+### Run dbt Manually
+
+Execute dbt commands inside the dbt container:
+
+```bash
+docker exec -it dbt_cli dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
+```
+
+## Cleanup
+
+To remove all containers and start fresh:
+
+```bash
+# Stop and remove docker-compose services
+docker-compose down
+
+# Remove standalone containers
+docker rm -f pg-warehouse
+docker rm -f metabase
+
+# Remove volumes (WARNING: This deletes all data)
+docker volume rm airflow-github-project_postgres-db-volume
+```
