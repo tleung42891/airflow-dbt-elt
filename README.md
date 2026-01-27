@@ -201,3 +201,41 @@ docker rm -f metabase
 # Remove volumes (WARNING: This deletes all data)
 docker volume rm airflow-github-project_postgres-db-volume
 ```
+
+## Troubleshooting
+
+### dbt Cannot Connect to pg-warehouse
+
+1. Verify pg-warehouse container is running:
+   ```bash
+   docker ps | grep pg-warehouse
+   ```
+
+2. Check network connectivity:
+   ```bash
+   docker exec -it dbt_cli ping pg-warehouse
+   ```
+
+3. Verify credentials match between `profiles.yml` and the container environment variables.
+
+### Container Network Issues
+
+Ensure all containers are on the same Docker network:
+```bash
+docker network ls
+docker network inspect airflow-github-project_default
+```
+
+## Development
+
+### Adding New DAGs
+
+1. Create a new Python file in `dags/`
+2. Define your DAG using Airflow decorators
+3. The DAG will be automatically discovered by Airflow
+
+### Modifying dbt Models
+
+1. Edit SQL files in `dbt_project/models/`
+2. Test locally: `docker exec -it dbt_cli dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt`
+3. Models will be run automatically by Airflow DAGs
