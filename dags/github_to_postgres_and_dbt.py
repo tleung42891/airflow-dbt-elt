@@ -113,7 +113,7 @@ def github_to_postgres_and_dbt():
         create_table_task >> raw_pulls >> load_task
 
     # Transformation
-    run_dbt_models = create_dbt_run_task()
+    run_dbt_models = create_dbt_run_task(elementary=True)
 
     # The dbt transformation waits for all parallel load tasks to complete successfully.
     all_load_tasks >> run_dbt_models

@@ -213,7 +213,7 @@ def github_contributions_to_postgres():
         create_table_task >> existing_dates >> contributions >> load_task
 
     # Transformation
-    run_dbt_models = create_dbt_run_task()
+    run_dbt_models = create_dbt_run_task(elementary=True)
 
     # The dbt transformation waits for all parallel load tasks to complete successfully.
     all_load_tasks >> run_dbt_models
