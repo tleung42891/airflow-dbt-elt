@@ -12,6 +12,7 @@ from utils.dbt_utils import create_dbt_run_task
     tags=["dbt", "manual"],
     params={
         "full_refresh": False,
+        "elementary": False,
     },
 )
 def run_dbt_manual():
@@ -20,9 +21,10 @@ def run_dbt_manual():
     
     Parameters:
     - full_refresh (bool): If True, runs dbt with --full-refresh flag. Default: False
+    - elementary (bool): If True, runs elementary tests after dbt run. Default: False
     """
     
-    run_dbt_models = create_dbt_run_task(full_refresh=None)
+    run_dbt_models = create_dbt_run_task(full_refresh=None, elementary=None)
 
 run_dbt_manual()
 
