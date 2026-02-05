@@ -4,14 +4,29 @@ This project sets up an Airflow-based ETL pipeline for extracting GitHub data, l
 
 ## Architecture
 
-The project consists of:
-- **Airflow**: Orchestrates data pipelines using CeleryExecutor
-- **PostgreSQL (Airflow DB)**: Stores Airflow metadata
-- **PostgreSQL (pg-warehouse)**: Data warehouse for GitHub data
-- **dbt**: Transforms raw data into analytics-ready models
-- **Elementary**: Data observability and quality monitoring (dbt package)
-- **Metabase**: Business intelligence and visualization tool (optional)
-- **Redis**: Message broker for Celery
+- **Airflow** (CeleryExecutor) — orchestration
+- **PostgreSQL** — Airflow metadata DB + **pg-warehouse** (data warehouse)
+- **Redis** — Celery broker
+- **dbt** — transformations (runs in container)
+- **Elementary** — data observability (dbt package)
+- **Metabase** (optional) — BI / viz
+
+## Project Structure
+
+```
+.
+├── dags/                    # Airflow DAG definitions
+│   ├── github_to_postgres_and_dbt.py
+│   ├── github_contributions_to_postgres_and_dbt.py
+│   └── utils/              # Utility functions
+├── dbt_project/            # dbt project files
+│   ├── models/             # dbt models
+│   └── profiles.yml        # dbt connection configuration
+├── dbt/                    # dbt Dockerfile
+├── config/                 # Configuration files
+├── logs/                   # Airflow logs
+└── docker-compose.yaml     # Docker Compose configuration
+```
 
 ## Prerequisites
 
