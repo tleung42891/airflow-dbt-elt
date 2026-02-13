@@ -281,11 +281,12 @@ services:
         condition: service_completed_successfully
 
   dbt:
-    build: 
+    build:
       context: ./dbt
     container_name: dbt_cli
     volumes:
-      - ${AIRFLOW_PROJ_DIR:-.}/dbt_project:/usr/app/dbt 
+      - ${AIRFLOW_PROJ_DIR:-.}/dbt_project:/usr/app/dbt
+      - ${AIRFLOW_PROJ_DIR:-.}:/repo
     networks:
       - default
     command: tail -f /dev/null
