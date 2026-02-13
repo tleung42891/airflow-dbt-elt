@@ -1,0 +1,19 @@
+# Run from inside container: docker exec -w /repo dbt_cli pre-commit run --all-files
+repos:
+  - repo: local
+    hooks:
+      - id: dbt-seed
+        name: dbt seed
+        entry: bash -c 'dbt seed --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt'
+        language: system
+        pass_filenames: false
+      - id: dbt-run
+        name: dbt run
+        entry: bash -c 'dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt'
+        language: system
+        pass_filenames: false
+      - id: dbt-test
+        name: dbt test
+        entry: bash -c 'dbt test --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt'
+        language: system
+        pass_filenames: false
