@@ -1,4 +1,6 @@
 # Run from inside container: docker exec -w /repo dbt_cli pre-commit run --all-files
+# dbt hooks only run when files under dbt_project/ are modified
+
 repos:
   - repo: local
     hooks:
@@ -7,13 +9,16 @@ repos:
         entry: bash -c 'dbt seed --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt'
         language: system
         pass_filenames: false
+        files: ^dbt_project/
       - id: dbt-run
-        name: dbt run
-        entry: bash -c 'dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt'
+        name: dbt run (modified + downstream)
+        entry: bash /repo/scripts/dbt-run-modified.sh
         language: system
         pass_filenames: false
+        files: ^dbt_project/
       - id: dbt-test
-        name: dbt test
-        entry: bash -c 'dbt test --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt'
+        name: dbt test (modified + downstream)
+        entry: bash /repo/scripts/dbt-test-modified.sh
         language: system
         pass_filenames: false
+        files: ^dbt_project/
