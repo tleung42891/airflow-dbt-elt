@@ -4,6 +4,7 @@
 target/
 dbt_packages/
 edr_target/
+coverage/
 /dbt_project/package-lock.yml
 
 # --- Airflow ---
