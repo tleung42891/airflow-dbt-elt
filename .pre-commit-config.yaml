@@ -22,3 +22,9 @@ repos:
         language: system
         pass_filenames: false
         files: ^dbt_project/
+      - id: dbt-coverage
+        name: dbt-coverage (full lineage has ≥1 test)
+        entry: bash /repo/scripts/dbt-coverage.sh
+        language: system
+        pass_filenames: false
+        files: ^dbt_project/
