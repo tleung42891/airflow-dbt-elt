@@ -28,3 +28,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^dbt_project/
+      - id: dbt-drop-stale-relations
+        name: dbt drop stale relations (execute)
+        entry: bash -c 'dbt run-operation drop_stale_relations --args "$0" --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt'
+        args: ['{"schema_name": "public", "dry_run": false}']
+        language: system
+        pass_filenames: false
+        files: ^dbt_project/
