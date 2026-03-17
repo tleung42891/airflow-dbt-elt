@@ -1,12 +1,11 @@
 from __future__ import annotations
 import pendulum
 import json
-import datetime
 import requests
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from typing import List, Tuple, Any, Set
-from datetime import timedelta
+from datetime import timedelta, datetime
 from utils.table_provisioning import create_table_if_not_exists
 from utils.insert_utils import load_data_with_config, load_table_config
 from utils.dbt_utils import create_dbt_run_task
@@ -14,9 +13,9 @@ from utils.dbt_utils import create_dbt_run_task
 # --- CONFIGURATION ---
 POSTGRES_CONN_ID = "postgres_default"
 BASE_API_URL = "https://github-contributions-api.deno.dev/{username}.json"
-YEARS_TO_FETCH = [2023, 2024, 2025]
 GITHUB_USERNAMES = ["tleung42891", "holmbergf", "TylerAkinsCrisp", "Burkland"]
-
+START_YEAR = 2023
+YEARS_TO_FETCH = list(range(START_YEAR, datetime.now().year + 1))
 
 def find_contribution_dicts(data):
     """Recursively searches for dictionaries containing a 'date' key."""
@@ -61,7 +60,7 @@ def github_contributions_to_postgres():
                 ORDER BY date
             """
             cursor.execute(query, (username,))
-            existing_dates = {row[0] for row in cursor.fetchall()}
+            existing_dates = sorted({row[0] for row in cursor.fetchall()})
             print(f"Found {len(existing_dates)} existing dates for {username}")
             return existing_dates
         except Exception as e:
@@ -82,10 +81,9 @@ def github_contributions_to_postgres():
         """
         print(f"\n--- Fetching data for USER: {username} ---")
         
-        # If we have very few existing dates (< backfill_threshold), do a full backfill. 
-        # Otherwise, do incremental (last N days based on restatement_window or default to 30 days if not specified)) to catch new/missed days
-        today = datetime.datetime.now().date()
-        
+        # If we have very few existing dates (< backfill_threshold), do a full backfill.
+        # Otherwise, do incremental (last N days based on restatement_window or default to 30 days if not specified) to catch new/missed days
+        today = datetime.now().date()
         table_config = load_table_config("raw_github_contributions")
         backfill_threshold = table_config.get("backfill_threshold", 30)
         
@@ -213,7 +211,7 @@ def github_contributions_to_postgres():
         create_table_task >> existing_dates >> contributions >> load_task
 
     # Transformation
-    run_dbt_models = create_dbt_run_task(elementary=True)
+    run_dbt_models = create_dbt_run_task(elementary=True, drop_stale_relations=True)
 
     # The dbt transformation waits for all parallel load tasks to complete successfully.
     all_load_tasks >> run_dbt_models
