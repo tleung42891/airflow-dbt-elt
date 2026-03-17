@@ -8,6 +8,7 @@ def create_dbt_run_task(
     task_id: str = 'run_dbt_transformations',
     full_refresh: Optional[bool] = False,
     elementary: Optional[bool] = False,
+    drop_stale_relations: Optional[bool] = False,
     docker_container: str = 'dbt_cli',
     profiles_dir: str = '/usr/app/dbt',
     project_dir: str = '/usr/app/dbt'
@@ -21,6 +22,8 @@ def create_dbt_run_task(
                      If None, reads full_refresh from Airflow params context. Default: False
         elementary: If True, runs elementary tests after dbt run. If False, skips elementary tests.
                    If None, reads elementary from Airflow params context. Default: False
+        drop_stale_relations: If True, runs the drop_stale_relations dbt macro after tests.
+                             If None, reads drop_stale_relations from Airflow params context. Default: False
         docker_container: Name of the Docker container running dbt. Default: 'dbt_cli'
         profiles_dir: Path to dbt profiles directory in container. Default: '/usr/app/dbt'
         project_dir: Path to dbt project directory in container. Default: '/usr/app/dbt'
@@ -45,7 +48,7 @@ def create_dbt_run_task(
         flag_init_parts.append("""
                     # Check if full_refresh parameter is set to true
                     FULL_REFRESH_FLAG=""
-                    if [ "{{{{ params.full_refresh }}}}" == "True" ] || [ "{{{{ params.full_refresh }}}}" == "true" ]; then
+                    if [ "{{ params.full_refresh | lower }}" = "true" ]; then
                         FULL_REFRESH_FLAG="--full-refresh"
                         echo "Running dbt with --full-refresh flag"
                     else
@@ -64,7 +67,7 @@ def create_dbt_run_task(
         flag_init_parts.append("""
                     # Check if elementary parameter is set to true
                     RUN_ELEMENTARY=""
-                    if [ "{{{{ params.elementary }}}}" == "True" ] || [ "{{{{ params.elementary }}}}" == "true" ]; then
+                    if [ "{{ params.elementary | lower }}" = "true" ]; then
                         RUN_ELEMENTARY="true"
                         echo "Will run elementary tests after dbt run and tests"
                     else
@@ -87,12 +90,31 @@ def create_dbt_run_task(
         else:
             elementary_test_cmd = ""
     
+    # Handle drop_stale_relations macro
+    if drop_stale_relations is None:
+        drop_stale_cmd = f"""
+                    # Check if drop_stale_relations parameter is set to true
+                    if [ "{{{{ params.drop_stale_relations | lower }}}}" = "true" ]; then
+                        echo "Dropping stale relations via dbt macro..."
+                        docker exec {docker_container} dbt run-operation drop_stale_relations --args '{{"schema_name": "public", "dry_run": false}}' --profiles-dir {profiles_dir} --project-dir {project_dir}
+                    else
+                        echo "Skipping drop_stale_relations macro"
+                    fi
+                    """
+    elif drop_stale_relations:
+        drop_stale_cmd = f"""
+                    echo "Dropping stale relations via dbt macro..."
+                    docker exec {docker_container} dbt run-operation drop_stale_relations --args '{{"schema_name": "public", "dry_run": false}}' --profiles-dir {profiles_dir} --project-dir {project_dir}
+                    """
+    else:
+        drop_stale_cmd = ""
+
     # Combine flag initialization
     flag_init = "".join(flag_init_parts)
     flag_var = " ".join([f for f in flag_var_parts if f])  # Join non-empty flags
     
     # Single bash command template
-    # Run dbt models, then regular tests, then elementary tests (if enabled)
+    # Run dbt models, then regular tests, then elementary tests (if enabled), then drop stale relations (if enabled)
     bash_command = f"""
                     {flag_init}
                     echo "Running dbt models..."
@@ -100,6 +122,7 @@ def create_dbt_run_task(
                     echo "Running dbt tests..."
                     docker exec {docker_container} dbt test --profiles-dir {profiles_dir} --project-dir {project_dir}
                     {elementary_test_cmd}
+                    {drop_stale_cmd}
                 """
     
     return BashOperator(
