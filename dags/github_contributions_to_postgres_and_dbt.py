@@ -61,7 +61,7 @@ def github_contributions_to_postgres():
                 ORDER BY date
             """
             cursor.execute(query, (username,))
-            existing_dates = {row[0] for row in cursor.fetchall()}
+            existing_dates = sorted({row[0] for row in cursor.fetchall()})
             print(f"Found {len(existing_dates)} existing dates for {username}")
             return existing_dates
         except Exception as e:
