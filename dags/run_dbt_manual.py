@@ -13,6 +13,7 @@ from utils.dbt_utils import create_dbt_run_task
     params={
         "full_refresh": False,
         "elementary": False,
+        "drop_stale_relations": False,
     },
 )
 def run_dbt_manual():
@@ -22,9 +23,10 @@ def run_dbt_manual():
     Parameters:
     - full_refresh (bool): If True, runs dbt with --full-refresh flag. Default: False
     - elementary (bool): If True, runs elementary tests after dbt run. Default: False
+    - drop_stale_relations (bool): If True, drops stale relations after dbt tests. Default: False
     """
     
-    run_dbt_models = create_dbt_run_task(full_refresh=None, elementary=None)
+    run_dbt_models = create_dbt_run_task(full_refresh=None, elementary=None, drop_stale_relations=None)
 
 run_dbt_manual()
 
