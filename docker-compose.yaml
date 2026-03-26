@@ -282,7 +282,8 @@ services:
 
   dbt:
     build:
-      context: ./dbt
+      context: .
+      dockerfile: dbt/Dockerfile
     container_name: dbt_cli
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}/dbt_project:/usr/app/dbt
@@ -293,6 +294,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  dag-tests:
+    profiles:
+      - tests
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dag-tests
+    container_name: dag_tests
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}:/repo
 
 volumes:
   postgres-db-volume:
