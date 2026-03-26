@@ -283,7 +283,7 @@ services:
   dbt:
     build:
       context: .
-      dockerfile: dbt/Dockerfile
+      dockerfile: docker/dbt/Dockerfile
     container_name: dbt_cli
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}/dbt_project:/usr/app/dbt
@@ -300,7 +300,7 @@ services:
       - tests
     build:
       context: .
-      dockerfile: docker/Dockerfile.dag-tests
+      dockerfile: docker/dag-tests/Dockerfile
     container_name: dag_tests
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/repo
