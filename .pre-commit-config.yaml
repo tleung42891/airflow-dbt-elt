@@ -1,6 +1,3 @@
-# Run from inside container: docker exec -w /repo dbt_cli pre-commit run --all-files
-# dbt hooks only run when files under dbt_project/ are modified
-
 repos:
   - repo: local
     hooks:
@@ -35,4 +32,11 @@ repos:
         language: system
         pass_filenames: false
         files: ^dbt_project/
+        verbose: true
+      - id: pytest-dags-utils
+        name: pytest (dag-tests)
+        entry: bash -c 'cd "$(git rev-parse --show-toplevel)" && exec docker compose --profile tests run --rm -T -w /repo --entrypoint python3 dag-tests scripts/run_all_tests.py'
+        language: system
+        pass_filenames: false
+        files: ^(dags|tests)/
         verbose: true
