@@ -35,7 +35,7 @@ repos:
         verbose: true
       - id: pytest-dags-utils
         name: pytest (dag-tests)
-        entry: bash -c 'cd "$(git rev-parse --show-toplevel)" && exec docker compose --profile tests run --rm -T -w /repo --entrypoint python3 dag-tests scripts/run_all_tests.py'
+        entry: bash -c 'cd "$(git rev-parse --show-toplevel)" && exec docker compose --profile tests run --rm -T -w /repo --entrypoint python3 dag-tests -m pytest tests/ -q'
         language: system
         pass_filenames: false
         files: ^(dags|tests)/
