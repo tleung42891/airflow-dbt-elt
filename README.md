@@ -18,14 +18,18 @@ This project sets up an Airflow-based ETL pipeline for extracting GitHub data, l
 ├── dags/                    # Airflow DAG definitions
 │   ├── github_to_postgres_and_dbt.py
 │   ├── github_contributions_to_postgres_and_dbt.py
-│   └── utils/              # Utility functions
-├── dbt_project/            # dbt project files
-│   ├── models/             # dbt models
-│   └── profiles.yml        # dbt connection configuration
-├── dbt/                    # dbt Dockerfile
-├── config/                 # Configuration files
-├── logs/                   # Airflow logs
-└── docker-compose.yaml     # Docker Compose configuration
+│   └── utils/               # Utility functions
+├── tests/                   # pytest (DAGs & dags/utils)
+├── scripts/                 # dbt lineage scripts
+├── docker/                  # Custom Compose images
+│   ├── dbt/Dockerfile       # dbt_cli image
+│   └── dag-tests/Dockerfile # pytest image (Airflow base)
+├── dbt_project/             # dbt project files
+│   ├── models/              # dbt models
+│   └── profiles.yml         # dbt connection configuration
+├── config/                  # Configuration files
+├── logs/                    # Airflow logs
+└── docker-compose.yaml
 ```
 
 ## Prerequisites
@@ -38,15 +42,13 @@ This project sets up an Airflow-based ETL pipeline for extracting GitHub data, l
 
 ### 1. Start Core Services
 
-Start the Airflow stack with docker-compose:
-
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This will start:
-- PostgreSQL (for Airflow metadata)
-- Redis (for Celery)
+- PostgreSQL (Airflow metadata)
+- Redis (Celery broker)
 - Airflow webserver (port 8080)
 - Airflow scheduler
 - Airflow worker
@@ -54,7 +56,7 @@ This will start:
 
 ### 2. Set Up Data Warehouse (pg-warehouse)
 
-The data warehouse PostgreSQL instance needs to be run as a standalone container to match the network configuration:
+The data warehouse PostgreSQL instance runs as a standalone container on the Compose network:
 
 ```bash
 docker run --name pg-warehouse \
@@ -66,36 +68,29 @@ docker run --name pg-warehouse \
   -d postgres:latest
 ```
 
-**Note**: Make sure the password matches your `dbt_project/profiles.yml` configuration. If your profiles.yml uses a different password (e.g., `mysecretpassword`), update the `POSTGRES_PASSWORD` environment variable accordingly.
+**Note**: Ensure the password matches `dbt_project/profiles.yml`.
 
 ### 3. Set Up Metabase (Optional)
 
-Metabase can be used for data visualization and SQL reader:
-
 ```bash
-# Pull the Metabase image
 docker pull metabase/metabase:latest
-
-# Run Metabase container
 docker run -d -p 3000:3000 --name metabase metabase/metabase
 ```
 
-Access Metabase at `http://localhost:3000` after it starts.
+Access Metabase at `http://localhost:3000`.
 
 ### 4. Rebuild dbt Container (After Any Changes)
 
-If you modify the dbt Dockerfile or need to update dependencies:
+If you modify `docker/dbt/Dockerfile` or need to update dependencies:
 
 ```bash
-docker-compose build dbt
-docker-compose up -d
+docker compose build dbt
+docker compose up -d dbt
 ```
 
 ### 5. Set Up Elementary (Data Observability)
 
-This project includes Elementary for data quality monitoring and observability.
-
-1. **Install dbt packages** (including Elementary):
+1. **Install dbt packages**:
    ```bash
    docker exec -it dbt_cli dbt deps --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
    ```
@@ -110,41 +105,41 @@ This project includes Elementary for data quality monitoring and observability.
    docker exec -it dbt_cli dbt test --select elementary --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
    ```
 
-4. **Generate Elementary CLI profile** (optional, for reporting):
+4. **Generate Elementary CLI profile** (optional):
    ```bash
    docker exec -it dbt_cli dbt run-operation elementary.generate_elementary_cli_profile --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
    ```
-   Copy the output and add it to your `dbt_project/profiles.yml` if you want to use Elementary CLI reporting features.
 
-5. **Generate observability report** (using Elementary CLI):
+5. **Generate observability report**:
    ```bash
    docker exec -it dbt_cli edr report --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
    ```
 
 ## Configuration
 
-### dbt Configuration
+### dbt
 
-The dbt project is configured in `dbt_project/profiles.yml`. Ensure the connection details match your pg-warehouse container:
+The dbt project is configured in `dbt_project/profiles.yml`:
 
 ```yaml
-postgres: 
+postgres:
   target: dev
   outputs:
     dev:
       type: postgres
       host: pg-warehouse
       user: postgres
-      password: mysecretpassword  # Update to match your container
+      password: mysecretpassword
       port: 5432
       dbname: postgres
       schema: public
 ```
+
 ### Airflow Connections
 
-Configure the following connections in Airflow UI (Admin → Connections):
+Configure in Airflow UI (Admin → Connections):
 
-1. **PostgreSQL Connection** (`postgres_default`):
+1. **PostgreSQL** (`postgres_default`):
    - Connection Type: Postgres
    - Host: `pg-warehouse`
    - Schema: `public`
@@ -152,76 +147,71 @@ Configure the following connections in Airflow UI (Admin → Connections):
    - Password: `mysecretpassword`
    - Port: `5432`
 
-2. **GitHub API Connection** (`github_api_conn`):
+2. **GitHub API** (`github_api_conn`):
    - Connection Type: HTTP
    - Host: `https://api.github.com`
    - Extra: `{"token": "your_github_token"}`
 
 ## Accessing Services
 
-- **Airflow Web UI**: http://localhost:8080
-  - Username: `airflow`
-  - Password: `airflow` (default)
+- **Airflow Web UI**: http://localhost:8080 (default: `airflow` / `airflow`)
 - **Metabase**: http://localhost:3000
 - **PostgreSQL (pg-warehouse)**: `localhost:5432`
 
 ## Common Operations
 
-### Start All Services
-
 ```bash
-docker-compose up -d
-```
+# Start all services
+docker compose up -d
 
-### Stop All Services
+# Stop all services
+docker compose down
 
-```bash
-docker-compose down
-```
+# View logs
+docker compose logs -f airflow-scheduler
+docker compose logs -f airflow-webserver
 
-### View Logs
+# Rebuild dbt container
+docker compose build dbt
+docker compose up -d dbt
 
-```bash
-docker-compose logs -f airflow-scheduler
-docker-compose logs -f airflow-webserver
-```
-
-### Rebuild dbt Container
-
-```bash
-docker-compose build dbt
-docker-compose up -d dbt
-```
-
-### Run dbt Manually
-
-Execute dbt commands inside the dbt container:
-
-```bash
+# Run dbt manually
 docker exec -it dbt_cli dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
 ```
 
+## Tests
+
+Tests cover DAG loading (`DagBag`), `dags/utils/`, and related helpers. They run in a separate Compose service (`dag-tests`) built from `docker/dag-tests/Dockerfile` (extends `apache/airflow:2.8.4`).
+
+1. **Build the test image** (after editing `docker/dag-tests/Dockerfile`):
+
+   ```bash
+   docker compose build dag-tests
+   ```
+
+2. **Run the full suite**:
+
+   ```bash
+   docker compose --profile tests run --rm -T -w /repo --entrypoint python3 dag-tests -m pytest tests/ -q
+   ```
+
+3. **Pre-commit**: the `pytest (dag-tests)` hook runs the same command when files under `dags/` or `tests/` change.
+
+Configuration: `pytest.ini` (`pythonpath = dags`, `addopts = -rN`), shared Airflow env in `tests/conftest.py`.
+
 ## Cleanup
 
-To remove all containers and start fresh:
-
 ```bash
-# Stop and remove docker-compose services
-docker-compose down
-
-# Remove standalone containers
-docker rm -f pg-warehouse
-docker rm -f metabase
-
-# Remove volumes (WARNING: This deletes all data)
-docker volume rm airflow-github-project_postgres-db-volume
+docker compose down
+docker rm -f pg-warehouse metabase
+docker volume rm airflow-github-project_postgres-db-volume  # WARNING: deletes all data
 ```
 
 ## Troubleshooting
 
 ### dbt Cannot Connect to pg-warehouse
 
-1. Verify pg-warehouse container is running:
+1. Verify the container is running:
    ```bash
    docker ps | grep pg-warehouse
    ```
@@ -236,6 +226,7 @@ docker volume rm airflow-github-project_postgres-db-volume
 ### Container Network Issues
 
 Ensure all containers are on the same Docker network:
+
 ```bash
 docker network ls
 docker network inspect airflow-github-project_default
