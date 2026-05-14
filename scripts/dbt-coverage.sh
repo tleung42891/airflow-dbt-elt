@@ -12,9 +12,10 @@ export PATH="/usr/local/bin:$PATH"
 mkdir -p "$COVERAGE_DIR"
 trap 'rm -rf "$COVERAGE_DIR"' EXIT
 
-# Staged dbt model files and schema files (test definitions)
-CHANGED_SQL=$(git diff --cached --name-only | grep -E '^dbt_project/models/.*\.sql$' || true)
-CHANGED_YAML=$(git diff --cached --name-only | grep -E '^dbt_project/models/.*\.(yml|yaml)$' || true)
+# Staged dbt model files and schema files (test definitions).
+STAGED=$(git diff --cached --no-merges --name-only || true)
+CHANGED_SQL=$(echo "$STAGED" | grep -E '^dbt_project/models/.*\.sql$' || true)
+CHANGED_YAML=$(echo "$STAGED" | grep -E '^dbt_project/models/.*\.(yml|yaml)$' || true)
 if [ -n "$CHANGED_SQL" ]; then
   SELECTOR=$(echo "$CHANGED_SQL" | sed 's|^dbt_project/||' | while read -r p; do echo "+path:${p}+"; done | tr '\n' ' ')
   LINEAGE_MODELS=$(cd "$PROJECT_DIR" && dbt ls --select $SELECTOR --profiles-dir "$PROFILES_DIR" --project-dir "$PROJECT_DIR" 2>/dev/null | sed -n 's/^model\.[^.]*\.//p' | sort -u || true)
@@ -24,7 +25,7 @@ fi
 
 # Generate artifacts and test coverage (quiet; only script summary is printed)
 cd "$PROJECT_DIR"
-dbt docs generate --profiles-dir "$PROFILES_DIR" --project-dir "$PROJECT_DIR" >/dev/null 2>&1
+dbt docs generate --no-compile --profiles-dir "$PROFILES_DIR" --project-dir "$PROJECT_DIR" >/dev/null 2>&1
 dbt-coverage compute test --run-artifacts-dir "$PROJECT_DIR/target" --cov-report "$COVERAGE_DIR/test.json" > "$COVERAGE_DIR/test_report.txt" 2>&1
 
 # Models with zero tests (exclude elementary)
