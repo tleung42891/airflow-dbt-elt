@@ -119,6 +119,20 @@ docker compose up -d dbt
 
 ### dbt
 
+The `dbt` Compose service (`container_name: dbt_cli`) is built from `docker/dbt/Dockerfile`. Current image requirements:
+
+| Item | Version / constraint |
+|------|----------------------|
+| Base image | `python:3.13-slim` |
+| OS packages | `git` |
+| `elementary-data` | `[postgres]` extra (PyPI; version follows image build) |
+| `dbt-core` | `1.11.10` |
+| `dbt-postgres` | `1.10.0` (latest Postgres adapter on PyPI; compatible with dbt-core 1.11) |
+| `pre-commit` | `4.6.0` |
+| `dbt-coverage` | `0.4.2` |
+
+After changing the Dockerfile, rebuild with `docker compose build dbt` (see setup step 4).
+
 The dbt project is configured in `dbt_project/profiles.yml`:
 
 ```yaml
