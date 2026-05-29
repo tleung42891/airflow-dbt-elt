@@ -2,12 +2,12 @@ from __future__ import annotations
 import pendulum
 import json 
 from airflow.decorators import dag, task
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.http.hooks.http import HttpHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from typing import List, Tuple, Any
 from utils.table_provisioning import create_table_if_not_exists
 from utils.insert_utils import load_data_with_config
-from utils.dbt_utils import create_dbt_run_task
 
 # --- CONFIGURATION ---
 GITHUB_CONN_ID = "github_api_conn"
@@ -23,10 +23,10 @@ MY_PROJECTS = [
 # --- DAG DEFINITION ---
 @dag(
     dag_id="github_to_postgres_and_dbt", 
-    schedule=None,
+    schedule="@daily",
     start_date=pendulum.datetime(2025, 1, 1, tz="UTC"),
     catchup=False,
-    tags=["github", "dbt", "elt"],
+    tags=["dbt", "github", "pulls"],
 )
 def github_to_postgres_and_dbt():
     
@@ -112,10 +112,18 @@ def github_to_postgres_and_dbt():
         # Set dependency: create_table_if_not_exists -> extract -> load
         create_table_task >> raw_pulls >> load_task
 
-    # Transformation
-    run_dbt_models = create_dbt_run_task(elementary=True)
+    # Transformation: trigger the shared run_dbt DAG (max_active_runs=1 serializes dbt runs)
+    trigger_dbt = TriggerDagRunOperator(
+        task_id="trigger_run_dbt",
+        trigger_dag_id="run_dbt",
+        conf={"elementary": True, "drop_stale_relations": True, "select": "tag:pulls+"},
+        wait_for_completion=True,
+        poke_interval=30,
+        allowed_states=["success"],
+        failed_states=["failed"],
+    )
 
     # The dbt transformation waits for all parallel load tasks to complete successfully.
-    all_load_tasks >> run_dbt_models
+    all_load_tasks >> trigger_dbt
 
 github_to_postgres_and_dbt()

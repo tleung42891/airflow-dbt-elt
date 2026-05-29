@@ -11,6 +11,16 @@ This project sets up an Airflow-based ETL pipeline for extracting GitHub data, l
 - **Elementary** — data observability (dbt package)
 - **Metabase** (optional) — BI / viz
 
+### DAG Orchestration
+
+The two ingestion DAGs extract from GitHub, load into PostgreSQL, then trigger a shared transformation DAG rather than running dbt inline:
+
+- **`github_to_postgres_and_dbt`** (`@daily`) — loads pull requests, then triggers `run_dbt` scoped to `tag:pulls+`.
+- **`github_contributions_to_postgres_and_dbt`** (`@daily`) — loads contributions, then triggers `run_dbt` scoped to `tag:contributions+`.
+- **`run_dbt`** (`schedule=None`, `max_active_runs=1`) — runs `dbt run`/`dbt test` for the selected tag (plus Elementary and stale-relation cleanup). Because it's capped at one active run, concurrent triggers queue and execute serially. It can also be triggered manually with `params` (`full_refresh`, `elementary`, `drop_stale_relations`, `select`).
+
+Each ingestion DAG only builds and tests its own slice of the dbt DAG via dbt's tag + graph operator (e.g. `tag:pulls+` selects the tagged staging model and all downstream models/tests).
+
 ## Project Structure
 
 ```
@@ -18,6 +28,7 @@ This project sets up an Airflow-based ETL pipeline for extracting GitHub data, l
 ├── dags/                    # Airflow DAG definitions
 │   ├── github_to_postgres_and_dbt.py
 │   ├── github_contributions_to_postgres_and_dbt.py
+│   ├── run_dbt.py           # Shared dbt transformation DAG (triggered by ingestion DAGs)
 │   └── utils/               # Utility functions
 ├── tests/                   # pytest (DAGs & dags/utils)
 ├── scripts/                 # dbt lineage scripts
@@ -259,3 +270,9 @@ docker network inspect airflow-github-project_default
 1. Edit SQL files in `dbt_project/models/`
 2. Test locally: `docker exec -it dbt_cli dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt`
 3. Models will be run automatically by Airflow DAGs
+
+**Tag-based selection**: the staging layer is tagged in `dbt_project.yml` (`stg_github_pulls` → `pulls`, `stg_github_contributions` → `contributions`). Downstream marts are selected via dbt's graph operator (`tag:pulls+`, `tag:contributions+`), so a new mart is picked up automatically as long as it `ref()`s its tagged staging model. To scope a run/test to one domain:
+
+```bash
+docker exec -it dbt_cli dbt build --select tag:pulls+ --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
+```
