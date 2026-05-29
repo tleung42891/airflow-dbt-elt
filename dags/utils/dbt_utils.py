@@ -9,6 +9,7 @@ def create_dbt_run_task(
     full_refresh: Optional[bool] = False,
     elementary: Optional[bool] = False,
     drop_stale_relations: Optional[bool] = False,
+    select: Optional[str] = '',
     docker_container: str = 'dbt_cli',
     profiles_dir: str = '/usr/app/dbt',
     project_dir: str = '/usr/app/dbt'
@@ -24,6 +25,8 @@ def create_dbt_run_task(
                    If None, reads elementary from Airflow params context. Default: False
         drop_stale_relations: If True, runs the drop_stale_relations dbt macro after tests.
                              If None, reads drop_stale_relations from Airflow params context. Default: False
+        select: dbt selector applied to `dbt run` and `dbt test` (e.g. 'tag:pulls'). Empty string
+                runs all models. If None, reads the selector from Airflow params context. Default: ''
         docker_container: Name of the Docker container running dbt. Default: 'dbt_cli'
         profiles_dir: Path to dbt profiles directory in container. Default: '/usr/app/dbt'
         project_dir: Path to dbt project directory in container. Default: '/usr/app/dbt'
@@ -35,8 +38,11 @@ def create_dbt_run_task(
         # Direct boolean value
         create_dbt_run_task(full_refresh=True, elementary=True)
         
+        # Scope to a tag
+        create_dbt_run_task(select='tag:pulls')
+        
         # Use Airflow params
-        create_dbt_run_task(full_refresh=None, elementary=None)  # Reads from {{ params.full_refresh }} and {{ params.elementary }}
+        create_dbt_run_task(full_refresh=None, elementary=None, select=None)  # Reads from {{ params.* }}
     """
     # Build the flag initialization logic conditionally
     flag_init_parts = []
@@ -77,7 +83,7 @@ def create_dbt_run_task(
         elementary_test_cmd = f"""
                     if [ "$RUN_ELEMENTARY" == "true" ]; then
                         echo "Running elementary tests..."
-                        docker exec {docker_container} dbt test --select elementary --profiles-dir {profiles_dir} --project-dir {project_dir}
+                        docker exec {docker_container} dbt run --select elementary --profiles-dir {profiles_dir} --project-dir {project_dir}
                     fi
                     """
     else:
@@ -109,6 +115,26 @@ def create_dbt_run_task(
     else:
         drop_stale_cmd = ""
 
+    # Handle select (dbt node selector, e.g. 'tag:pulls') applied to both run and test
+    if select is None:
+        # Use Airflow params template
+        flag_init_parts.append("""
+                    # Check if a select selector was provided
+                    SELECT_FLAG=""
+                    if [ -n "{{ params.select }}" ]; then
+                        SELECT_FLAG="--select {{ params.select }}"
+                        echo "Scoping dbt to selector: {{ params.select }}"
+                    else
+                        echo "Running dbt on all models"
+                    fi
+                    """)
+        select_var = "$SELECT_FLAG"
+    elif select:
+        # Use direct selector value
+        select_var = f"--select {select}"
+    else:
+        select_var = ""
+
     # Combine flag initialization
     flag_init = "".join(flag_init_parts)
     flag_var = " ".join([f for f in flag_var_parts if f])  # Join non-empty flags
@@ -118,9 +144,9 @@ def create_dbt_run_task(
     bash_command = f"""
                     {flag_init}
                     echo "Running dbt models..."
-                    docker exec {docker_container} dbt run {flag_var} --profiles-dir {profiles_dir} --project-dir {project_dir}
+                    docker exec {docker_container} dbt run {flag_var} {select_var} --profiles-dir {profiles_dir} --project-dir {project_dir}
                     echo "Running dbt tests..."
-                    docker exec {docker_container} dbt test --profiles-dir {profiles_dir} --project-dir {project_dir}
+                    docker exec {docker_container} dbt test {select_var} --profiles-dir {profiles_dir} --project-dir {project_dir}
                     {elementary_test_cmd}
                     {drop_stale_cmd}
                 """
