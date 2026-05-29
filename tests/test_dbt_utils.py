@@ -78,3 +78,20 @@ def test_params_mode_includes_jinja_for_full_refresh():
     assert "params.full_refresh" in cmd
     assert "params.elementary" in cmd
     assert "params.drop_stale_relations" in cmd
+
+
+def test_select_applies_to_both_run_and_test():
+    op = create_dbt_run_task(select="tag:pulls")
+    cmd = op.bash_command
+    # Applied to the dbt run and the dbt test commands
+    assert cmd.count("--select tag:pulls") == 2
+
+
+def test_select_params_mode_includes_jinja():
+    op = create_dbt_run_task(select=None)
+    assert "params.select" in op.bash_command
+
+
+def test_select_empty_omits_flag():
+    op = create_dbt_run_task(select="")
+    assert "--select" not in op.bash_command

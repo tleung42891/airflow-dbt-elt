@@ -15,7 +15,7 @@ EXPECTED_DAG_IDS = frozenset(
     {
         "github_to_postgres_and_dbt",
         "github_contributions_to_postgres_and_dbt",
-        "run_dbt_manual",
+        "run_dbt",
     }
 )
 

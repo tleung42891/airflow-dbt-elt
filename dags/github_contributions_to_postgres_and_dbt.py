@@ -3,12 +3,12 @@ import pendulum
 import json
 import requests
 from airflow.decorators import dag, task
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from typing import List, Tuple, Any, Set
 from datetime import timedelta, datetime
 from utils.table_provisioning import create_table_if_not_exists
 from utils.insert_utils import load_data_with_config, load_table_config
-from utils.dbt_utils import create_dbt_run_task
 
 # --- CONFIGURATION ---
 POSTGRES_CONN_ID = "postgres_default"
@@ -38,7 +38,7 @@ def find_contribution_dicts(data):
     schedule="@daily",
     start_date=pendulum.datetime(2025, 1, 1, tz="UTC"),
     catchup=False,
-    tags=["github", "contributions", "elt"],
+    tags=["contributions", "dbt", "github"],
 )
 def github_contributions_to_postgres():
     
@@ -210,11 +210,19 @@ def github_contributions_to_postgres():
         # Set dependencies: create_table_if_not_exists -> get_existing_dates -> extract -> load
         create_table_task >> existing_dates >> contributions >> load_task
 
-    # Transformation
-    run_dbt_models = create_dbt_run_task(elementary=True, drop_stale_relations=True)
+    # Transformation: trigger the shared run_dbt DAG (max_active_runs=1 serializes dbt runs)
+    trigger_dbt = TriggerDagRunOperator(
+        task_id="trigger_run_dbt",
+        trigger_dag_id="run_dbt",
+        conf={"elementary": True, "drop_stale_relations": True, "select": "tag:contributions+"},
+        wait_for_completion=True,
+        poke_interval=30,
+        allowed_states=["success"],
+        failed_states=["failed"],
+    )
 
     # The dbt transformation waits for all parallel load tasks to complete successfully.
-    all_load_tasks >> run_dbt_models
+    all_load_tasks >> trigger_dbt
 
 github_contributions_to_postgres()
 
