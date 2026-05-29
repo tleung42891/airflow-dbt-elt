@@ -1,4 +1,4 @@
-name: 'personal_demo'
+name: 'warehouse'
 version: '1.0.0'
 config-version: 2
 profile: 'postgres'
@@ -8,5 +8,12 @@ test-paths: ["tests"]
 target-path: "target"
 
 models:
+  warehouse:
+    staging:
+      github:
+        stg_github_pulls:
+          +tags: ["pulls"]
+        stg_github_contributions:
+          +tags: ["contributions"]
   elementary:
     +schema: elementary
