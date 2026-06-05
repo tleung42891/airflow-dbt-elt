@@ -1,8 +1,137 @@
 """
 Utility functions for running dbt transformations in Airflow DAGs.
 """
+from __future__ import annotations
+
 from airflow.operators.bash import BashOperator
-from typing import Optional
+from typing import Optional, Tuple
+
+
+def _full_refresh_flag(full_refresh: Optional[bool]) -> Tuple[str, str]:
+    """Return (flag_init, inline_flag) for the --full-refresh flag.
+
+    When ``full_refresh`` is None the flag is resolved at runtime from Airflow params.
+    """
+    if full_refresh is None:
+        flag_init = """
+                    # Check if full_refresh parameter is set to true
+                    FULL_REFRESH_FLAG=""
+                    if [ "{{ params.full_refresh | lower }}" = "true" ]; then
+                        FULL_REFRESH_FLAG="--full-refresh"
+                        echo "Running dbt with --full-refresh flag"
+                    else
+                        echo "Running dbt in incremental mode (no --full-refresh)"
+                    fi
+                    """
+        return flag_init, "$FULL_REFRESH_FLAG"
+
+    return "", "--full-refresh" if full_refresh else ""
+
+
+def _select_flag(select: Optional[str]) -> Tuple[str, str]:
+    """Return (flag_init, inline_flag) for the --select selector (e.g. 'tag:pulls').
+
+    When ``select`` is None the selector is resolved at runtime from Airflow params.
+    An empty string runs all models (no selector).
+    """
+    if select is None:
+        flag_init = """
+                    # Check if a select selector was provided
+                    SELECT_FLAG=""
+                    if [ -n "{{ params.select }}" ]; then
+                        SELECT_FLAG="--select {{ params.select }}"
+                        echo "Scoping dbt to selector: {{ params.select }}"
+                    else
+                        echo "Running dbt on all models"
+                    fi
+                    """
+        return flag_init, "$SELECT_FLAG"
+
+    if select:
+        return "", f"--select {select}"
+
+    return "", ""
+
+
+def _elementary_flag(
+    elementary: Optional[bool],
+    docker_container: str,
+    profiles_dir: str,
+    project_dir: str,
+) -> Tuple[str, str]:
+    """Return (flag_init, trailing_cmd) for the elementary deployment step.
+
+    When ``elementary`` is None the toggle is resolved at runtime from Airflow params.
+    """
+    run_cmd = (
+        f"docker exec {docker_container} dbt run --select elementary "
+        f"--profiles-dir {profiles_dir} --project-dir {project_dir}"
+    )
+
+    if elementary is None:
+        flag_init = """
+                    # Check if elementary parameter is set to true
+                    RUN_ELEMENTARY=""
+                    if [ "{{ params.elementary | lower }}" = "true" ]; then
+                        RUN_ELEMENTARY="true"
+                        echo "Will run elementary tests after dbt run and tests"
+                    else
+                        echo "Skipping elementary tests"
+                    fi
+                    """
+        trailing = f"""
+                    if [ "$RUN_ELEMENTARY" == "true" ]; then
+                        echo "Running elementary tests..."
+                        {run_cmd}
+                    fi
+                    """
+        return flag_init, trailing
+
+    if elementary:
+        trailing = f"""
+                    echo "Running elementary tests..."
+                    {run_cmd}
+                    """
+        return "", trailing
+
+    return "", ""
+
+
+def _drop_stale_flag(
+    drop_stale_relations: Optional[bool],
+    docker_container: str,
+    profiles_dir: str,
+    project_dir: str,
+) -> str:
+    """Return the trailing command block for the drop_stale_relations macro.
+
+    When ``drop_stale_relations`` is None the toggle is resolved at runtime from Airflow params.
+    """
+    run_op = (
+        f"docker exec {docker_container} dbt run-operation drop_stale_relations "
+        f"--args '{{\"schema_name\": \"public\", \"dry_run\": false}}' "
+        f"--profiles-dir {profiles_dir} --project-dir {project_dir}"
+    )
+
+    if drop_stale_relations is None:
+        return f"""
+                    # Check if drop_stale_relations parameter is set to true
+                    if [ "{{{{ params.drop_stale_relations | lower }}}}" = "true" ]; then
+                        echo "Dropping stale relations via dbt macro..."
+                        {run_op}
+                    else
+                        echo "Skipping drop_stale_relations macro"
+                    fi
+                    """
+
+    if drop_stale_relations:
+        return f"""
+                    echo "Dropping stale relations via dbt macro..."
+                    {run_op}
+                    """
+
+    return ""
+
 
 def create_dbt_run_task(
     task_id: str = 'run_dbt_transformations',
@@ -44,115 +173,31 @@ def create_dbt_run_task(
         # Use Airflow params
         create_dbt_run_task(full_refresh=None, elementary=None, select=None)  # Reads from {{ params.* }}
     """
-    # Build the flag initialization logic conditionally
-    flag_init_parts = []
-    flag_var_parts = []
-    
-    # Handle full_refresh flag
-    if full_refresh is None:
-        # Use Airflow params template
-        flag_init_parts.append("""
-                    # Check if full_refresh parameter is set to true
-                    FULL_REFRESH_FLAG=""
-                    if [ "{{ params.full_refresh | lower }}" = "true" ]; then
-                        FULL_REFRESH_FLAG="--full-refresh"
-                        echo "Running dbt with --full-refresh flag"
-                    else
-                        echo "Running dbt in incremental mode (no --full-refresh)"
-                    fi
-                    """)
-        flag_var_parts.append("$FULL_REFRESH_FLAG")
-    else:
-        # Use direct boolean value
-        flag_value = "--full-refresh" if full_refresh else ""
-        flag_var_parts.append(flag_value)
-    
-    # Handle elementary flag
-    if elementary is None:
-        # Use Airflow params template
-        flag_init_parts.append("""
-                    # Check if elementary parameter is set to true
-                    RUN_ELEMENTARY=""
-                    if [ "{{ params.elementary | lower }}" = "true" ]; then
-                        RUN_ELEMENTARY="true"
-                        echo "Will run elementary tests after dbt run and tests"
-                    else
-                        echo "Skipping elementary tests"
-                    fi
-                    """)
-        elementary_test_cmd = f"""
-                    if [ "$RUN_ELEMENTARY" == "true" ]; then
-                        echo "Running elementary tests..."
-                        docker exec {docker_container} dbt run --select elementary --profiles-dir {profiles_dir} --project-dir {project_dir}
-                    fi
-                    """
-    else:
-        # Use direct boolean value
-        if elementary:
-            elementary_test_cmd = f"""
-                    echo "Running elementary tests..."
-                    docker exec {docker_container} dbt run --select elementary --profiles-dir {profiles_dir} --project-dir {project_dir}
-                    """
-        else:
-            elementary_test_cmd = ""
-    
-    # Handle drop_stale_relations macro
-    if drop_stale_relations is None:
-        drop_stale_cmd = f"""
-                    # Check if drop_stale_relations parameter is set to true
-                    if [ "{{{{ params.drop_stale_relations | lower }}}}" = "true" ]; then
-                        echo "Dropping stale relations via dbt macro..."
-                        docker exec {docker_container} dbt run-operation drop_stale_relations --args '{{"schema_name": "public", "dry_run": false}}' --profiles-dir {profiles_dir} --project-dir {project_dir}
-                    else
-                        echo "Skipping drop_stale_relations macro"
-                    fi
-                    """
-    elif drop_stale_relations:
-        drop_stale_cmd = f"""
-                    echo "Dropping stale relations via dbt macro..."
-                    docker exec {docker_container} dbt run-operation drop_stale_relations --args '{{"schema_name": "public", "dry_run": false}}' --profiles-dir {profiles_dir} --project-dir {project_dir}
-                    """
-    else:
-        drop_stale_cmd = ""
+    full_refresh_pre, full_refresh_var = _full_refresh_flag(full_refresh)
+    select_pre, select_var = _select_flag(select)
+    elementary_pre, elementary_cmd = _elementary_flag(
+        elementary, docker_container, profiles_dir, project_dir
+    )
+    drop_stale_cmd = _drop_stale_flag(
+        drop_stale_relations, docker_container, profiles_dir, project_dir
+    )
 
-    # Handle select (dbt node selector, e.g. 'tag:pulls') applied to both run and test
-    if select is None:
-        # Use Airflow params template
-        flag_init_parts.append("""
-                    # Check if a select selector was provided
-                    SELECT_FLAG=""
-                    if [ -n "{{ params.select }}" ]; then
-                        SELECT_FLAG="--select {{ params.select }}"
-                        echo "Scoping dbt to selector: {{ params.select }}"
-                    else
-                        echo "Running dbt on all models"
-                    fi
-                    """)
-        select_var = "$SELECT_FLAG"
-    elif select:
-        # Use direct selector value
-        select_var = f"--select {select}"
-    else:
-        select_var = ""
+    # flag_init holds the bash var initialization for any params-driven flags.
+    flag_init = "".join([full_refresh_pre, elementary_pre, select_pre])
 
-    # Combine flag initialization
-    flag_init = "".join(flag_init_parts)
-    flag_var = " ".join([f for f in flag_var_parts if f])  # Join non-empty flags
-    
     # Single bash command template
     # Run dbt models, then regular tests, then elementary tests (if enabled), then drop stale relations (if enabled)
     bash_command = f"""
                     {flag_init}
                     echo "Running dbt models..."
-                    docker exec {docker_container} dbt run {flag_var} {select_var} --profiles-dir {profiles_dir} --project-dir {project_dir}
+                    docker exec {docker_container} dbt run {full_refresh_var} {select_var} --profiles-dir {profiles_dir} --project-dir {project_dir}
                     echo "Running dbt tests..."
                     docker exec {docker_container} dbt test {select_var} --profiles-dir {profiles_dir} --project-dir {project_dir}
-                    {elementary_test_cmd}
+                    {elementary_cmd}
                     {drop_stale_cmd}
                 """
-    
+
     return BashOperator(
         task_id=task_id,
         bash_command=bash_command.strip()
     )
-
