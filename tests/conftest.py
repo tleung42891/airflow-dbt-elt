@@ -26,6 +26,9 @@ def pytest_configure(config) -> None:  # noqa: ARG001
         "sqlite:////tmp/airflow_unit_test.db",
     )
     os.environ.setdefault("AIRFLOW__CORE__DAGS_FOLDER", str(DAGS_FOLDER))
+    # Cosmos dbt-ls cache writes Airflow Variables; disable for unit tests without a migrated DB.
+    os.environ.setdefault("AIRFLOW__COSMOS__ENABLE_CACHE", "false")
+    os.environ.setdefault("AIRFLOW__COSMOS__ENABLE_CACHE_DBT_LS", "false")
     _patch_terminal_summary_line()
 
 

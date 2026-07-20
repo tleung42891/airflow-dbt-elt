@@ -16,6 +16,9 @@ EXPECTED_DAG_IDS = frozenset(
         "github_to_postgres_and_dbt",
         "github_contributions_to_postgres_and_dbt",
         "run_dbt",
+        "run_dbt_cosmos",
+        "run_dbt_cosmos_pulls",
+        "run_dbt_cosmos_contributions",
     }
 )
 
@@ -48,3 +51,29 @@ def test_dag_has_no_cycles(dag_bag, dag_id):
     assert dag is not None
     # topological_sort raises if there is a cycle
     list(dag.topological_sort())
+
+
+def test_run_dbt_cosmos_has_post_steps(dag_bag):
+    for dag_id in (
+        "run_dbt_cosmos",
+        "run_dbt_cosmos_pulls",
+        "run_dbt_cosmos_contributions",
+    ):
+        dag = dag_bag.dags.get(dag_id)
+        assert dag is not None, dag_id
+        task_ids = set(dag.task_ids)
+        assert "check_elementary" in task_ids
+        assert "run_elementary" in task_ids
+        assert "check_drop_stale_relations" in task_ids
+        assert "drop_stale_relations" in task_ids
+        assert len(dag.tasks) > 4
+
+
+def test_ingestion_triggers_tag_scoped_cosmos(dag_bag):
+    pulls = dag_bag.dags["github_to_postgres_and_dbt"]
+    contrib = dag_bag.dags["github_contributions_to_postgres_and_dbt"]
+    assert pulls.get_task("trigger_run_dbt_cosmos_pulls").trigger_dag_id == "run_dbt_cosmos_pulls"
+    assert (
+        contrib.get_task("trigger_run_dbt_cosmos_contributions").trigger_dag_id
+        == "run_dbt_cosmos_contributions"
+    )
