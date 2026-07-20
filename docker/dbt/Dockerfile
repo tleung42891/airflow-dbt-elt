@@ -1,3 +1,5 @@
+# Slim CLI image for legacy `run_dbt` (docker exec), pre-commit, and Elementary.
+# Intentionally separate from docker/airflow (heavy Airflow base + Cosmos).
 FROM python:3.13-slim
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir --upgrade pip \
