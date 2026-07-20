@@ -1,45 +1,53 @@
 # Airflow GitHub Project
 
-This project sets up an Airflow-based ETL pipeline for extracting GitHub data, loading it into PostgreSQL, and transforming it with dbt.
+This project sets up an Airflow-based ETL pipeline for extracting GitHub data, loading it into PostgreSQL, and transforming it with dbt via [Astronomer Cosmos](https://astronomer.github.io/astronomer-cosmos/).
 
 ## Architecture
 
-- **Airflow** (CeleryExecutor) — orchestration
+- **Airflow** (CeleryExecutor) — orchestration; custom image with Cosmos + an isolated dbt venv
 - **PostgreSQL** — Airflow metadata DB + **pg-warehouse** (data warehouse)
 - **Redis** — Celery broker
-- **dbt** — transformations (runs in container)
-- **Elementary** — data observability (dbt package)
+- **dbt** (Cosmos `ExecutionMode.LOCAL`) — transforms run on the Airflow worker against the mounted `dbt_project/`
+- **Elementary** — optional observability post-step on Cosmos DAGs (also usable via legacy `dbt_cli`)
 - **Metabase** (optional) — BI / viz
+- **`dbt_cli` container** (optional) — slim image for pre-commit, manual `docker exec`, and the legacy `run_dbt` DAG
 
 ### DAG Orchestration
 
-The two ingestion DAGs extract from GitHub, load into PostgreSQL, then trigger a shared transformation DAG rather than running dbt inline:
+Ingestion loads raw tables into Postgres, then triggers a tag-scoped Cosmos DAG. Selection is parse-time (`RenderConfig`); Cosmos cannot take a runtime `--select` the way a single Bash `dbt` task can.
 
-- **`github_to_postgres_and_dbt`** (`@daily`) — loads pull requests, then triggers `run_dbt` scoped to `tag:pulls+`.
-- **`github_contributions_to_postgres_and_dbt`** (`@daily`) — loads contributions, then triggers `run_dbt` scoped to `tag:contributions+`.
-- **`run_dbt`** (`schedule=None`, `max_active_runs=1`) — runs `dbt run`/`dbt test` for the selected tag (plus Elementary and stale-relation cleanup). Because it's capped at one active run, concurrent triggers queue and execute serially. It can also be triggered manually with `params` (`full_refresh`, `elementary`, `drop_stale_relations`, `select`).
+```text
+github_to_postgres_and_dbt ──► run_dbt_cosmos_pulls          (tag:pulls+)
+github_contributions_…     ──► run_dbt_cosmos_contributions  (tag:contributions+)
+                               run_dbt_cosmos                (path:models, manual full rebuild)
+                               run_dbt                       (legacy docker-exec; manual only)
+```
 
-Each ingestion DAG only builds and tests its own slice of the dbt DAG via dbt's tag + graph operator (e.g. `tag:pulls+` selects the tagged staging model and all downstream models/tests).
+- **`github_to_postgres_and_dbt`** (`@daily`) — closed PRs → `raw_github_pulls` → triggers `run_dbt_cosmos_pulls` with `elementary` / `drop_stale_relations` in `conf`.
+- **`github_contributions_to_postgres_and_dbt`** (`@daily`) — contribution counts → `raw_github_contributions` → triggers `run_dbt_cosmos_contributions` the same way.
+- **`run_dbt_cosmos_*`** (`schedule=None`, `max_active_runs=1`, `max_active_tasks=4`) — one Airflow task per model, then **`TestBehavior.AFTER_ALL`** (single `dbt test` after all models). Optional Elementary and `drop_stale_relations` post-steps.
+- **`run_dbt`** — legacy path: one Bash task `docker exec`s into `dbt_cli`.
+
+Staging models are tagged in `dbt_project.yml` (`pulls` / `contributions`); marts are included via dbt’s `+` graph operator on those tags.
 
 ## Project Structure
 
 ```
 .
-├── dags/                    # Airflow DAG definitions
+├── dags/
 │   ├── github_to_postgres_and_dbt.py
 │   ├── github_contributions_to_postgres_and_dbt.py
-│   ├── run_dbt.py           # Shared dbt transformation DAG (triggered by ingestion DAGs)
-│   └── utils/               # Utility functions
-├── tests/                   # pytest (DAGs & dags/utils)
-├── scripts/                 # dbt lineage scripts
-├── docker/                  # Custom Compose images
-│   ├── dbt/Dockerfile       # dbt_cli image
-│   └── dag-tests/Dockerfile # pytest image (Airflow base)
-├── dbt_project/             # dbt project files
-│   ├── models/              # dbt models
-│   └── profiles.yml         # dbt connection configuration
-├── config/                  # Configuration files
-├── logs/                    # Airflow logs
+│   ├── run_dbt_cosmos.py    # Cosmos DAGs: full + pulls + contributions
+│   ├── run_dbt.py           # Legacy docker-exec dbt (manual)
+│   ├── table_configs/       # Raw table DDL / upsert YAML
+│   └── utils/
+├── dbt_project/             # dbt project (mounted into Airflow + dbt_cli)
+├── docker/
+│   ├── airflow/Dockerfile   # Runtime: Airflow + Cosmos + dbt venv
+│   ├── dag-tests/Dockerfile # Extends Airflow image + pytest
+│   └── dbt/Dockerfile       # Slim dbt_cli (legacy / pre-commit)
+├── scripts/                 # pre-commit helpers (modified run/test, coverage)
+├── tests/                   # pytest (DagBag + utils)
 └── docker-compose.yaml
 ```
 
@@ -53,7 +61,10 @@ Each ingestion DAG only builds and tests its own slice of the dbt DAG via dbt's 
 
 ### 1. Start Core Services
 
+Build the custom Airflow image (Cosmos + isolated dbt venv), then start the stack:
+
 ```bash
+docker compose build
 docker compose up -d
 ```
 
@@ -64,6 +75,29 @@ This will start:
 - Airflow scheduler
 - Airflow worker
 - dbt CLI container
+
+`airflow-init` migrates the Airflow DB and runs `dbt deps` into the mounted `dbt_project/` (Cosmos LOCAL; per-task `install_deps` is off).
+
+#### After changing `dbt_project/packages.yml`
+
+No image rebuild — packages land on the host mount. Re-run init:
+
+```bash
+docker compose up airflow-init
+```
+
+That refreshes `dbt_project/dbt_packages/` (and `package-lock.yml`). Restart the scheduler if Cosmos DAGs were already failing to parse:
+
+```bash
+docker compose restart airflow-scheduler airflow-worker
+```
+
+#### After changing `docker/airflow/Dockerfile`
+
+```bash
+docker compose build airflow-webserver airflow-scheduler airflow-worker
+docker compose up -d
+```
 
 ### 2. Set Up Data Warehouse (pg-warehouse)
 
@@ -101,9 +135,10 @@ docker compose up -d dbt
 
 ### 5. Set Up Elementary (Data Observability)
 
-1. **Install dbt packages**:
+1. **Install dbt packages** (prefer init — same mount Cosmos uses):
    ```bash
-   docker exec -it dbt_cli dbt deps --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
+   docker compose up airflow-init
+   # or legacy: docker exec -it dbt_cli dbt deps --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
    ```
 
 2. **Deploy Elementary models**:
@@ -127,6 +162,18 @@ docker compose up -d dbt
    ```
 
 ## Configuration
+
+### Airflow (Cosmos)
+
+Airflow services use the custom image from `docker/airflow/Dockerfile` (not the stock `apache/airflow` tag alone). Notable pins:
+
+| Item | Version / constraint |
+|------|----------------------|
+| Base image | `apache/airflow:2.8.4-python3.11` |
+| `astronomer-cosmos` | `1.13.1` (last line supporting Airflow 2.8; 1.14+ needs ≥2.9) |
+| Isolated dbt venv | `/opt/airflow/dbt_venv` with `dbt-core==1.11.10`, `dbt-postgres==1.10.0` |
+
+The dbt project is mounted into Airflow at `/opt/airflow/dbt_project` for Cosmos `ExecutionMode.LOCAL`. Profiles for Cosmos tasks come from the Airflow connection `postgres_default` (ProfileMapping), not from `profiles.yml`. The separate `dbt_cli` container remains the path used by `run_dbt`, pre-commit, and manual `docker exec`.
 
 ### dbt
 
@@ -186,7 +233,8 @@ Configure in Airflow UI (Admin → Connections):
 ## Common Operations
 
 ```bash
-# Start all services
+# Build custom images, then start all services
+docker compose build
 docker compose up -d
 
 # Stop all services
@@ -196,22 +244,31 @@ docker compose down
 docker compose logs -f airflow-scheduler
 docker compose logs -f airflow-webserver
 
-# Rebuild dbt container
+# After editing dbt_project/packages.yml (no image rebuild)
+docker compose up airflow-init
+docker compose restart airflow-scheduler airflow-worker
+
+# Rebuild Airflow image (Cosmos / dbt venv / Dockerfile changes)
+docker compose build airflow-webserver
+docker compose up -d
+
+# Rebuild dbt container (legacy CLI / pre-commit image)
 docker compose build dbt
 docker compose up -d dbt
 
-# Run dbt manually
+# Run dbt manually (legacy dbt_cli)
 docker exec -it dbt_cli dbt run --profiles-dir /usr/app/dbt --project-dir /usr/app/dbt
 ```
 
 ## Tests
 
-Tests cover DAG loading (`DagBag`), `dags/utils/`, and related helpers. They run in a separate Compose service (`dag-tests`) built from `docker/dag-tests/Dockerfile` (extends `apache/airflow:2.8.4`).
+Tests cover DAG loading (`DagBag`), `dags/utils/`, and related helpers. They run in a Compose service (`dag-tests`) that extends the Airflow image and adds pytest (`docker/dag-tests/Dockerfile`).
 
-1. **Build the test image** (after editing `docker/dag-tests/Dockerfile`):
+1. **Build images** (Airflow first, then dag-tests via compose `additional_contexts`):
 
    ```bash
-   docker compose build dag-tests
+   docker compose build
+   docker compose --profile tests build dag-tests
    ```
 
 2. **Run the full suite**:
