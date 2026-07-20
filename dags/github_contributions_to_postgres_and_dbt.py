@@ -210,11 +210,11 @@ def github_contributions_to_postgres():
         # Set dependencies: create_table_if_not_exists -> get_existing_dates -> extract -> load
         create_table_task >> existing_dates >> contributions >> load_task
 
-    # Transformation: trigger the shared run_dbt DAG (max_active_runs=1 serializes dbt runs)
+    # Transformation: tag-scoped Cosmos DAG (parse-time select=tag:contributions+)
     trigger_dbt = TriggerDagRunOperator(
-        task_id="trigger_run_dbt",
-        trigger_dag_id="run_dbt",
-        conf={"elementary": True, "drop_stale_relations": True, "select": "tag:contributions+"},
+        task_id="trigger_run_dbt_cosmos_contributions",
+        trigger_dag_id="run_dbt_cosmos_contributions",
+        conf={"elementary": True, "drop_stale_relations": True},
         wait_for_completion=True,
         poke_interval=30,
         allowed_states=["success"],

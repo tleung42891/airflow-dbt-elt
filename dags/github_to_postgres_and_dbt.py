@@ -112,11 +112,11 @@ def github_to_postgres_and_dbt():
         # Set dependency: create_table_if_not_exists -> extract -> load
         create_table_task >> raw_pulls >> load_task
 
-    # Transformation: trigger the shared run_dbt DAG (max_active_runs=1 serializes dbt runs)
+    # Transformation: tag-scoped Cosmos DAG (parse-time select=tag:pulls+)
     trigger_dbt = TriggerDagRunOperator(
-        task_id="trigger_run_dbt",
-        trigger_dag_id="run_dbt",
-        conf={"elementary": True, "drop_stale_relations": True, "select": "tag:pulls+"},
+        task_id="trigger_run_dbt_cosmos_pulls",
+        trigger_dag_id="run_dbt_cosmos_pulls",
+        conf={"elementary": True, "drop_stale_relations": True},
         wait_for_completion=True,
         poke_interval=30,
         allowed_states=["success"],
