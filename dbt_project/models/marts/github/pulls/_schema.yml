@@ -183,7 +183,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['open', 'closed']
+              arguments:
+                values: ['open', 'closed']
       - name: created_at
         description: Timestamp when PR was created
         tests:
@@ -198,7 +199,8 @@ models:
         description: Status of the PR - 'merged', 'closed_not_merged', or 'open'
         tests:
           - accepted_values:
-              values: ['merged', 'closed_not_merged', 'open']
+              arguments:
+                values: ['merged', 'closed_not_merged', 'open']
 
   - name: mart_github_pulls_trends
     description: |

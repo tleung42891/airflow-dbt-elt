@@ -43,7 +43,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['open', 'closed']
+              arguments:
+                values: ['open', 'closed']
       - name: created_at
         description: Timestamp when the pull request was created
         tests:
