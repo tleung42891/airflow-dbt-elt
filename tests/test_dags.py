@@ -17,8 +17,6 @@ EXPECTED_DAG_IDS = frozenset(
         "github_contributions_to_postgres_and_dbt",
         "run_dbt",
         "run_dbt_cosmos",
-        "run_dbt_cosmos_pulls",
-        "run_dbt_cosmos_contributions",
     }
 )
 
@@ -54,26 +52,49 @@ def test_dag_has_no_cycles(dag_bag, dag_id):
 
 
 def test_run_dbt_cosmos_has_post_steps(dag_bag):
-    for dag_id in (
-        "run_dbt_cosmos",
-        "run_dbt_cosmos_pulls",
-        "run_dbt_cosmos_contributions",
-    ):
-        dag = dag_bag.dags.get(dag_id)
-        assert dag is not None, dag_id
-        task_ids = set(dag.task_ids)
-        assert "check_elementary" in task_ids
-        assert "run_elementary" in task_ids
-        assert "check_drop_stale_relations" in task_ids
-        assert "drop_stale_relations" in task_ids
-        assert len(dag.tasks) > 4
+    dag = dag_bag.dags.get("run_dbt_cosmos")
+    assert dag is not None
+    task_ids = set(dag.task_ids)
+    assert "resolve_selection" in task_ids
+    assert "check_elementary" in task_ids
+    assert "run_elementary" in task_ids
+    assert "check_drop_stale_relations" in task_ids
+    assert "drop_stale_relations" in task_ids
+    assert len(dag.tasks) > 4
 
 
-def test_ingestion_triggers_tag_scoped_cosmos(dag_bag):
+def test_ingestion_triggers_cosmos_with_tag_select(dag_bag):
     pulls = dag_bag.dags["github_to_postgres_and_dbt"]
     contrib = dag_bag.dags["github_contributions_to_postgres_and_dbt"]
-    assert pulls.get_task("trigger_run_dbt_cosmos_pulls").trigger_dag_id == "run_dbt_cosmos_pulls"
-    assert (
-        contrib.get_task("trigger_run_dbt_cosmos_contributions").trigger_dag_id
-        == "run_dbt_cosmos_contributions"
-    )
+    pulls_trigger = pulls.get_task("trigger_run_dbt_cosmos")
+    contrib_trigger = contrib.get_task("trigger_run_dbt_cosmos")
+    assert pulls_trigger.trigger_dag_id == "run_dbt_cosmos"
+    assert contrib_trigger.trigger_dag_id == "run_dbt_cosmos"
+    assert pulls_trigger.conf["select"] == "tag:pulls+"
+    assert contrib_trigger.conf["select"] == "tag:contributions+"
+
+
+def test_selected_model_names_tag_plus():
+    from run_dbt_cosmos import selected_model_names
+
+    nodes = {
+        "model.x.stg_pulls": {
+            "name": "stg_github_pulls",
+            "tags": {"pulls"},
+            "depends_on": [],
+        },
+        "model.x.mart_pulls": {
+            "name": "mart_pulls",
+            "tags": set(),
+            "depends_on": ["model.x.stg_pulls"],
+        },
+        "model.x.stg_contrib": {
+            "name": "stg_github_contributions",
+            "tags": {"contributions"},
+            "depends_on": [],
+        },
+    }
+    assert selected_model_names("", nodes) is None
+    assert selected_model_names("tag:pulls+", nodes) == {"stg_github_pulls", "mart_pulls"}
+    assert selected_model_names("tag:pulls", nodes) == {"stg_github_pulls"}
+    assert selected_model_names("tag:contributions+", nodes) == {"stg_github_contributions"}
