@@ -148,7 +148,8 @@ models:
         description: Status of the streak - 'active' if ongoing, 'ended' if completed
         tests:
           - accepted_values:
-              values: ['active', 'ended']
+              arguments:
+                values: ['active', 'ended']
 
   - name: mart_github_contributions_trends
     description: |
