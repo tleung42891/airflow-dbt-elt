@@ -1,9 +1,12 @@
 """Cosmos dbt DAG — full warehouse graph with runtime tag-based skipping.
 
-The Airflow UI always shows **all** models plus ``TestBehavior.AFTER_ALL`` tests
-(``path:models``, excluding ``package:elementary``). Upstream ingestion DAGs
-trigger this DAG with ``conf["select"]`` (e.g. ``tag:pulls+``); tasks outside
-that selection raise ``AirflowSkipException`` so only the tagged subgraph runs.
+The Airflow UI always shows **all** models plus one ``TestBehavior.AFTER_ALL``
+test task (``path:models``, excluding ``package:elementary``). Upstream ingestion
+DAGs trigger with ``conf["select"]`` (e.g. ``tag:pulls+``):
+
+- Unselected **model** tasks raise ``AirflowSkipException``.
+- The AFTER_ALL task rewrites its live ``select`` to that same selector so dbt
+  runs one scoped ``dbt test --select tag:…+`` (not the full suite).
 
 Empty / omitted ``select`` = run everything (manual full rebuild).
 
@@ -74,7 +77,6 @@ profile_config = ProfileConfig(
     profile_mapping=PostgresUserPasswordProfileMapping(
         conn_id=POSTGRES_CONN_ID,
         profile_args={"schema": "public"},
-        disable_event_tracking=True,
     ),
 )
 
@@ -197,23 +199,32 @@ def _model_resource_name(task) -> str:
 
 
 def _install_runtime_skips(dag: DbtDag) -> None:
-    """Skip model tasks outside conf select; scope AFTER_ALL test the same way."""
+    """Skip model tasks outside conf select; scope AFTER_ALL test the same way.
 
-    def _skip_unselected_model(context: Mapping[str, Any], *, task) -> None:
+    Airflow executes a *shallow copy* of each task. Mutations (e.g. ``select``)
+    must target ``context["task"]`` — the copy — not the DAG-definition object
+    captured at parse time, or ``dbt test`` keeps the parse-time
+    ``path:models`` selector and runs the full suite.
+    """
+
+    def _skip_unselected_model(context: Mapping[str, Any]) -> None:
         selected = context["ti"].xcom_pull(task_ids="resolve_selection", key="selected_models")
         if selected is None:
             return
-        name = _model_resource_name(task)
+        name = _model_resource_name(context["task"])
         if name not in selected:
             raise AirflowSkipException(
                 f"Skipping {name!r}: not in runtime select "
                 f"{context['ti'].xcom_pull(task_ids='resolve_selection', key='runtime_select')!r}"
             )
 
-    def _scope_after_all_test(context: Mapping[str, Any], *, task) -> None:
+    def _scope_after_all_test(context: Mapping[str, Any]) -> None:
+        # Prefer the live task copy Airflow is about to execute.
+        task = context["task"]
         select = context["ti"].xcom_pull(task_ids="resolve_selection", key="runtime_select") or ""
         if select:
-            # List form matches RenderConfig / Cosmos CLI joining.
+            # List form matches RenderConfig / Cosmos CLI joining → one
+            # efficient `dbt test --select tag:…+` for the tagged subgraph only.
             task.select = [select]
             print(f"AFTER_ALL test scoped to --select {select}")
 
@@ -225,10 +236,10 @@ def _install_runtime_skips(dag: DbtDag) -> None:
             task.trigger_rule = TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS
             previous = task.pre_execute
 
-            def pre_execute(context, *, _task=task, _prev=previous):
+            def pre_execute(context, *, _prev=previous):
                 if callable(_prev):
                     _prev(context)
-                _scope_after_all_test(context, task=_task)
+                _scope_after_all_test(context)
 
             task.pre_execute = pre_execute
             continue
@@ -236,10 +247,10 @@ def _install_runtime_skips(dag: DbtDag) -> None:
         if isinstance(task, DbtRunLocalOperator) and task.task_id != "run_elementary":
             previous = task.pre_execute
 
-            def pre_execute(context, *, _task=task, _prev=previous):
+            def pre_execute(context, *, _prev=previous):
                 if callable(_prev):
                     _prev(context)
-                _skip_unselected_model(context, task=_task)
+                _skip_unselected_model(context)
 
             task.pre_execute = pre_execute
 
