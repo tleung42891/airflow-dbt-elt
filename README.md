@@ -105,7 +105,7 @@ The data warehouse PostgreSQL instance runs as a standalone container on the Com
 
 ```bash
 docker run --name pg-warehouse \
-  --network airflow-github-project_default \
+  --network airflow-dbt-elt_default \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=mysecretpassword \
   -e POSTGRES_DB=postgres \
@@ -311,7 +311,7 @@ Ensure all containers are on the same Docker network:
 
 ```bash
 docker network ls
-docker network inspect airflow-github-project_default
+docker network inspect airflow-dbt-elt_default
 ```
 
 ## Development
