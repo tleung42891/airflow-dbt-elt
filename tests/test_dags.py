@@ -17,6 +17,7 @@ EXPECTED_DAG_IDS = frozenset(
         "github_contributions_to_postgres_and_dbt",
         "run_dbt",
         "run_dbt_cosmos",
+        "test_dbt_cosmos",
     }
 )
 
@@ -60,6 +61,7 @@ def test_run_dbt_cosmos_has_post_steps(dag_bag):
     assert "run_elementary" in task_ids
     assert "check_drop_stale_relations" in task_ids
     assert "drop_stale_relations" in task_ids
+    assert "trigger_test_dbt_cosmos" in task_ids
     assert len(dag.tasks) > 4
 
 
