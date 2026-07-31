@@ -1,16 +1,17 @@
 """Cosmos dbt DAG — full warehouse graph with runtime tag-based skipping.
 
-The Airflow UI always shows **all** models plus one ``TestBehavior.AFTER_ALL``
-test task (``path:models``, excluding ``package:elementary``). Upstream ingestion
-DAGs trigger with ``conf["select"]`` (e.g. ``tag:pulls+``):
+The Airflow UI always shows **all** models (``path:models``, excluding
+``package:elementary``); dbt tests live in the ``test_dbt_cosmos`` DAG, which
+this DAG triggers at the end of every run. Upstream ingestion DAGs trigger
+with ``conf["select"]`` (e.g. ``tag:pulls+``):
 
 - Unselected **model** tasks raise ``AirflowSkipException``.
-- The AFTER_ALL task rewrites its live ``select`` to that same selector so dbt
-  runs one scoped ``dbt test --select tag:…+`` (not the full suite).
+- The forwarded ``select`` scopes ``test_dbt_cosmos`` the same way.
 
 Empty / omitted ``select`` = run everything (manual full rebuild).
 
 Uses ``ExecutionMode.LOCAL``. Optional post-steps: Elementary, ``drop_stale_relations``.
+Every run ends by triggering ``test_dbt_cosmos`` with the same runtime ``select``.
 
 dbt packages are installed during ``airflow-init`` (``dbt deps`` into the mounted
 ``dbt_project/``). Per-task ``install_deps`` is disabled on purpose.
@@ -26,6 +27,7 @@ from typing import Any, Mapping, Optional, Set
 import pendulum
 from airflow.exceptions import AirflowSkipException
 from airflow.operators.python import PythonOperator, ShortCircuitOperator
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.utils.trigger_rule import TriggerRule
 from cosmos import (
     DbtDag,
@@ -40,7 +42,6 @@ from cosmos.constants import TestBehavior
 from cosmos.operators.local import (
     DbtRunLocalOperator,
     DbtRunOperationLocalOperator,
-    DbtTestLocalOperator,
 )
 from cosmos.profiles import PostgresUserPasswordProfileMapping
 
@@ -68,6 +69,7 @@ _CONTROL_TASK_IDS = frozenset(
         "run_elementary",
         "check_drop_stale_relations",
         "drop_stale_relations",
+        "trigger_test_dbt_cosmos",
     }
 )
 
@@ -199,13 +201,7 @@ def _model_resource_name(task) -> str:
 
 
 def _install_runtime_skips(dag: DbtDag) -> None:
-    """Skip model tasks outside conf select; scope AFTER_ALL test the same way.
-
-    Airflow executes a *shallow copy* of each task. Mutations (e.g. ``select``)
-    must target ``context["task"]`` — the copy — not the DAG-definition object
-    captured at parse time, or ``dbt test`` keeps the parse-time
-    ``path:models`` selector and runs the full suite.
-    """
+    """Skip model tasks outside conf select."""
 
     def _skip_unselected_model(context: Mapping[str, Any]) -> None:
         selected = context["ti"].xcom_pull(task_ids="resolve_selection", key="selected_models")
@@ -218,30 +214,8 @@ def _install_runtime_skips(dag: DbtDag) -> None:
                 f"{context['ti'].xcom_pull(task_ids='resolve_selection', key='runtime_select')!r}"
             )
 
-    def _scope_after_all_test(context: Mapping[str, Any]) -> None:
-        # Prefer the live task copy Airflow is about to execute.
-        task = context["task"]
-        select = context["ti"].xcom_pull(task_ids="resolve_selection", key="runtime_select") or ""
-        if select:
-            # List form matches RenderConfig / Cosmos CLI joining → one
-            # efficient `dbt test --select tag:…+` for the tagged subgraph only.
-            task.select = [select]
-            print(f"AFTER_ALL test scoped to --select {select}")
-
     for task in dag.tasks:
         if task.task_id in _CONTROL_TASK_IDS:
-            continue
-
-        if isinstance(task, DbtTestLocalOperator):
-            task.trigger_rule = TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS
-            previous = task.pre_execute
-
-            def pre_execute(context, *, _prev=previous):
-                if callable(_prev):
-                    _prev(context)
-                _scope_after_all_test(context)
-
-            task.pre_execute = pre_execute
             continue
 
         if isinstance(task, DbtRunLocalOperator) and task.task_id != "run_elementary":
@@ -301,10 +275,22 @@ def _attach_post_steps(dag: DbtDag) -> None:
         install_deps=False,
         dag=dag,
     )
+    # Chain the tests-only DAG after every run, forwarding this run's live
+    # selector so test_dbt_cosmos scopes its test tasks the same way.
+    trigger_tests = TriggerDagRunOperator(
+        task_id="trigger_test_dbt_cosmos",
+        trigger_dag_id="test_dbt_cosmos",
+        conf={
+            "select": "{{ ti.xcom_pull(task_ids='resolve_selection', key='runtime_select') or '' }}",
+        },
+        trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS,
+        dag=dag,
+    )
 
     for leaf in leaves:
         leaf >> check_elementary
         leaf >> check_drop_stale
+        leaf >> trigger_tests
 
     check_elementary >> run_elementary
     check_drop_stale >> drop_stale
@@ -318,8 +304,9 @@ render_config = RenderConfig(
     select=["path:models"],
     exclude=["package:elementary"],
     dbt_deps=False,
-    # One dbt test after all model runs (dbt-like), not a .test task per model.
-    test_behavior=TestBehavior.AFTER_ALL,
+    # No test tasks here — test_dbt_cosmos owns testing and is triggered
+    # at the end of every run with the same runtime select.
+    test_behavior=TestBehavior.NONE,
 )
 
 run_dbt_cosmos = DbtDag(
