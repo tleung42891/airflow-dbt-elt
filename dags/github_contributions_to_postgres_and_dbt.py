@@ -12,10 +12,27 @@ from utils.insert_utils import load_data_with_config, load_table_config
 
 # --- CONFIGURATION ---
 POSTGRES_CONN_ID = "postgres_default"
-BASE_API_URL = "https://github-contributions-api.deno.dev/{username}.json"
-GITHUB_USERNAMES = ["tleung42891", "holmbergf", "TylerAkinsCrisp", "Burkland"]
+GITHUB_CONN_ID = "github_api_conn"
+GRAPHQL_API_URL = "https://api.github.com/graphql"
+GITHUB_USERNAMES = ["tleung42891", "holmbergf", "TylerAkins", "Burkland"]
 START_YEAR = 2023
 YEARS_TO_FETCH = list(range(START_YEAR, datetime.now().year + 1))
+CONTRIBUTIONS_QUERY = """
+query($login: String!, $from: DateTime!, $to: DateTime!) {
+  user(login: $login) {
+    contributionsCollection(from: $from, to: $to) {
+      contributionCalendar {
+        weeks {
+          contributionDays {
+            date
+            contributionCount
+          }
+        }
+      }
+    }
+  }
+}
+"""
 
 def find_contribution_dicts(data):
     """Recursively searches for dictionaries containing a 'date' key."""
@@ -105,40 +122,62 @@ def github_contributions_to_postgres():
             date_ranges = [(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))]
             print(f"  📅 Incremental mode: {len(existing_dates)} existing dates, fetching last {restatement_window} days ({start_date} to {end_date})")
         
+        # Retrieve the GitHub token from the connection's 'Extra' field
+        from airflow.hooks.base import BaseHook
+
+        conn = BaseHook.get_connection(GITHUB_CONN_ID)
+        try:
+            token = conn.extra_dejson["token"]
+        except KeyError as e:
+            raise ValueError(f"Error accessing GitHub token from connection 'Extra' field: {e}")
+
         all_daily_contributions = {}
-        api_base = BASE_API_URL.format(username=username)
         new_dates_count = 0
         skipped_dates_count = 0
-        
+        failed_ranges = 0
+
         for start_date, end_date in date_ranges:
-            # Construct the API URL with the date range
-            api_url_with_dates = f"{api_base}?from={start_date}&to={end_date}"
             print(f"  -> Fetching data from {start_date} to {end_date}...")
             
             data = None
             
             try:
-                response = requests.get(api_url_with_dates)
-                response.raise_for_status() 
-                
-                # JSON cleaning logic
-                raw_text = response.text.strip()
-                start_index = raw_text.find('{')
-                
-                if start_index == -1:
-                    print(f"  ❌ Date range {start_date} to {end_date}: Response did not contain a valid JSON object. Skipping.")
-                    continue
-                
-                clean_text = raw_text[start_index:]
-                data = json.loads(clean_text)
-                
+                response = requests.post(
+                    GRAPHQL_API_URL,
+                    json={
+                        "query": CONTRIBUTIONS_QUERY,
+                        "variables": {
+                            "login": username,
+                            "from": f"{start_date}T00:00:00Z",
+                            "to": f"{end_date}T23:59:59Z",
+                        },
+                    },
+                    headers={"Authorization": f"bearer {token}"},
+                    timeout=30,
+                )
+                response.raise_for_status()
+                payload = response.json()
             except requests.exceptions.RequestException as e:
                 print(f"  ❌ Date range {start_date} to {end_date}: Failed to fetch data: {e}. Skipping.")
+                failed_ranges += 1
                 continue
             except json.JSONDecodeError as e:
                 print(f"  ❌ Date range {start_date} to {end_date}: Failed to decode JSON: {e}. Skipping.")
+                failed_ranges += 1
                 continue
-            
+
+            # GraphQL reports failures in-band with HTTP 200
+            if payload.get("errors"):
+                print(f"  ❌ Date range {start_date} to {end_date}: GraphQL errors: {payload['errors']}. Skipping.")
+                failed_ranges += 1
+                continue
+            if not (payload.get("data") or {}).get("user"):
+                print(f"  ❌ Date range {start_date} to {end_date}: user {username!r} not found. Skipping.")
+                failed_ranges += 1
+                continue
+
+            data = payload["data"]
+
             # --- Data Processing (Recursive Search) ---
             if data is not None:
                 all_contributions = find_contribution_dicts(data)
@@ -157,6 +196,12 @@ def github_contributions_to_postgres():
                                 pass
                         else:
                             skipped_dates_count += 1
+
+        # If every date range failed, surface it as a task failure instead.
+        if date_ranges and failed_ranges == len(date_ranges):
+            raise RuntimeError(
+                f"All {failed_ranges} fetch(es) for {username!r} failed — see errors above."
+            )
 
         print(f"  ✅ Found {new_dates_count} new dates to load (skipped {skipped_dates_count} existing dates)")
 
