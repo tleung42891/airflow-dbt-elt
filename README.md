@@ -14,18 +14,19 @@ This project sets up an Airflow-based ETL pipeline for extracting GitHub data, l
 
 ### DAG Orchestration
 
-Ingestion loads raw tables into Postgres, then triggers the shared Cosmos DAG with a runtime `select` in `conf`. The UI always shows the **full** model graph; tasks outside the selector are skipped.
+Ingestion loads raw tables into Postgres, then triggers the shared Cosmos DAG with a runtime `select` in `conf`. Model *runs* and dbt *tests* are split into two chained DAGs; the UI always shows the **full** graph in each, and tasks outside the selector are skipped.
 
 ```text
-github_to_postgres_and_dbt ──► run_dbt_cosmos   conf.select=tag:pulls+
-github_contributions_…     ──► run_dbt_cosmos   conf.select=tag:contributions+
-                               run_dbt_cosmos   (empty select = full rebuild)
+github_to_postgres_and_dbt ──► run_dbt_cosmos ──► test_dbt_cosmos   conf.select=tag:pulls+
+github_contributions_…     ──► run_dbt_cosmos ──► test_dbt_cosmos   conf.select=tag:contributions+
+                               run_dbt_cosmos ──► test_dbt_cosmos   (empty select = full rebuild)
                                run_dbt          (legacy docker-exec; manual only)
 ```
 
 - **`github_to_postgres_and_dbt`** (`@daily`) — closed PRs → `raw_github_pulls` → triggers `run_dbt_cosmos` with `select=tag:pulls+`, plus `elementary` / `drop_stale_relations`.
 - **`github_contributions_to_postgres_and_dbt`** (`@daily`) — contribution counts → `raw_github_contributions` → same DAG with `select=tag:contributions+`.
-- **`run_dbt_cosmos`** (`schedule=None`, `max_active_runs=1`, `max_active_tasks=4`) — one Airflow task per model (full `path:models` graph), then **`TestBehavior.AFTER_ALL`**. `resolve_selection` + per-task skips honor `conf.select` (`tag:<name>` / `tag:<name>+`). Optional Elementary and `drop_stale_relations` post-steps.
+- **`run_dbt_cosmos`** (`schedule=None`, `max_active_runs=1`, `max_active_tasks=4`) — one Airflow task per model (full `path:models` graph), **no test tasks** (`TestBehavior.NONE`). `resolve_selection` + per-task skips honor `conf.select` (`tag:<name>` / `tag:<name>+`). Optional Elementary and `drop_stale_relations` post-steps. Every run ends with `trigger_test_dbt_cosmos`, forwarding its runtime `select`.
+- **`test_dbt_cosmos`** (`schedule=None`) — tests-only POC for warehouses where materialization happens outside Airflow (e.g. Snowflake dynamic tables): **one Airflow task per individual dbt test**, grouped by model (task ids strip dbt's hash suffix), no model run squares. Built by post-processing a `TestBehavior.AFTER_EACH` Cosmos DAG at parse time: run tasks are removed (edges rewired so lineage ordering between tests holds) and each aggregate `<model>.test` is split into scoped `dbt test --select <test_name>` tasks. Honors the same `conf.select` scoping via `resolve_selection` + per-task skips.
 - **`run_dbt`** — legacy path: one Bash task `docker exec`s into `dbt_cli`.
 
 Staging models are tagged in `dbt_project.yml` (`pulls` / `contributions`); marts are included via dbt’s `+` graph operator on those tags.
@@ -37,7 +38,8 @@ Staging models are tagged in `dbt_project.yml` (`pulls` / `contributions`); mart
 ├── dags/
 │   ├── github_to_postgres_and_dbt.py
 │   ├── github_contributions_to_postgres_and_dbt.py
-│   ├── run_dbt_cosmos.py    # Cosmos: full graph + runtime tag skip
+│   ├── run_dbt_cosmos.py    # Cosmos: model runs + runtime tag skip (no tests)
+│   ├── test_dbt_cosmos.py   # Cosmos: one task per dbt test, grouped by model
 │   ├── run_dbt.py           # Legacy docker-exec dbt (manual)
 │   ├── table_configs/       # Raw table DDL / upsert YAML
 │   └── utils/
