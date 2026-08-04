@@ -2,6 +2,7 @@ from __future__ import annotations
 import pendulum
 import json 
 from airflow.decorators import dag, task
+from airflow.models import Variable
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.http.hooks.http import HttpHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
@@ -12,13 +13,8 @@ from utils.insert_utils import load_data_with_config
 # --- CONFIGURATION ---
 GITHUB_CONN_ID = "github_api_conn"
 POSTGRES_CONN_ID = "postgres_default" 
-
-MY_PROJECTS = [
-    "tleung42891/productivity",
-    "tleung42891/develop_health_example",
-    "tleung42891/dbt_poc",
-    "tleung42891/airflow-dbt-elt",
-] 
+GITHUB_REPOS_VAR = "github_repos"
+GITHUB_REPOS = Variable.get(GITHUB_REPOS_VAR, deserialize_json=True, default_var=[])
 
 # --- DAG DEFINITION ---
 @dag(
@@ -94,7 +90,7 @@ def github_to_postgres_and_dbt():
     #  Extract and Load in Parallel
     all_load_tasks = []
 
-    for project in MY_PROJECTS:
+    for project in GITHUB_REPOS:
         repo_name_safe = project.replace('/', '_')
         
         # Extract

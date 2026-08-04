@@ -29,6 +29,8 @@ def pytest_configure(config) -> None:  # noqa: ARG001
     # Cosmos dbt-ls cache writes Airflow Variables; disable for unit tests without a migrated DB.
     os.environ.setdefault("AIRFLOW__COSMOS__ENABLE_CACHE", "false")
     os.environ.setdefault("AIRFLOW__COSMOS__ENABLE_CACHE_DBT_LS", "false")
+    os.environ.setdefault("AIRFLOW_VAR_GITHUB_REPOS", '["example-user/example-repo"]')
+    os.environ.setdefault("AIRFLOW_VAR_GITHUB_USERNAMES", '["example-user"]')
     _patch_terminal_summary_line()
 
 
