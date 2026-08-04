@@ -3,6 +3,7 @@ import pendulum
 import json
 import requests
 from airflow.decorators import dag, task
+from airflow.models import Variable
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from typing import List, Tuple, Any, Set
@@ -14,7 +15,8 @@ from utils.insert_utils import load_data_with_config, load_table_config
 POSTGRES_CONN_ID = "postgres_default"
 GITHUB_CONN_ID = "github_api_conn"
 GRAPHQL_API_URL = "https://api.github.com/graphql"
-GITHUB_USERNAMES = ["tleung42891", "holmbergf", "TylerAkins", "Burkland"]
+GITHUB_USERNAMES_VAR = "github_usernames"
+GITHUB_USERNAMES = Variable.get(GITHUB_USERNAMES_VAR, deserialize_json=True, default_var=[])
 START_YEAR = 2023
 YEARS_TO_FETCH = list(range(START_YEAR, datetime.now().year + 1))
 CONTRIBUTIONS_QUERY = """

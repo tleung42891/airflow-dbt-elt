@@ -226,6 +226,22 @@ Configure in Airflow UI (Admin → Connections):
    - Host: `https://api.github.com`
    - Extra: `{"token": "your_github_token"}`
 
+### Airflow Variables
+
+The GitHub ingestion DAGs don't hardcode any repositories or usernames — **you must provide your own** via Airflow Variables (Admin → Variables). Both are JSON lists; until they are set, the DAGs parse fine but create no extract/load tasks.
+
+1. **`github_repos`** (used by `github_to_postgres_and_dbt`) — repositories to pull closed PRs from, as `owner/repo` strings:
+   ```json
+   ["your-github-user/your-repo", "your-github-user/another-repo"]
+   ```
+
+2. **`github_usernames`** (used by `github_contributions_to_postgres_and_dbt`) — users whose contribution calendars are fetched:
+   ```json
+   ["your-github-user", "a-teammate"]
+   ```
+
+Alternatively, set them as environment variables on the Airflow containers (`AIRFLOW_VAR_GITHUB_REPOS`, `AIRFLOW_VAR_GITHUB_USERNAMES`) with the same JSON values. Note the DAGs fan out one extract/load branch per repo/username, so changes to these variables alter the DAG shape on the next scheduler parse.
+
 ## Accessing Services
 
 - **Airflow Web UI**: http://localhost:8080 (default: `airflow` / `airflow`)
