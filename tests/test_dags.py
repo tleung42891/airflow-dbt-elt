@@ -100,3 +100,44 @@ def test_selected_model_names_tag_plus():
     assert selected_model_names("tag:pulls+", nodes) == {"stg_github_pulls", "mart_pulls"}
     assert selected_model_names("tag:pulls", nodes) == {"stg_github_pulls"}
     assert selected_model_names("tag:contributions+", nodes) == {"stg_github_contributions"}
+
+
+def test_dbt_cosmos_select_strips_hash_suffix(dag_bag):
+    """Per-test --select must drop Cosmos/dbt's _<10-hex> node-name hash.
+
+    dbt rejects selectors like not_null_…_username_7f0653e49a ("does not match
+    any enabled nodes"); the base name without the suffix is what works.
+    """
+    import re
+
+    from cosmos.operators.local import DbtTestLocalOperator
+
+    dag = dag_bag.dags.get("test_dbt_cosmos")
+    assert dag is not None
+
+    hash_suffix = re.compile(r"_[0-9a-f]{10}$")
+    hashed_selects = []
+    for task in dag.tasks:
+        if not isinstance(task, DbtTestLocalOperator):
+            continue
+        select = getattr(task, "select", None) or []
+        for selector in select:
+            if hash_suffix.search(str(selector)):
+                hashed_selects.append((task.task_id, selector))
+
+    assert not hashed_selects, (
+        "Per-test dbt selects must strip the _<10-hex> hash suffix; "
+        f"found: {hashed_selects}"
+    )
+
+    # Specific regression from the activity_patterns not_null username failure.
+    activity = [
+        t
+        for t in dag.tasks
+        if isinstance(t, DbtTestLocalOperator)
+        and t.task_id.endswith("not_null_mart_github_contributions_activity_patterns_username")
+    ]
+    assert len(activity) == 1
+    assert activity[0].select == [
+        "not_null_mart_github_contributions_activity_patterns_username"
+    ]
