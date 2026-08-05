@@ -14,7 +14,7 @@ per-test render mode, so the DAG is post-processed at parse time:
    per individual dbt test (read from Cosmos's parsed ``dbt ls`` graph), placed
    in the model's task group so the UI shows e.g. the ``stg_github_pulls``
    group with six test squares, each running a scoped
-   ``dbt test --select <test_name>``.
+   ``dbt test --select <base_test_name>`` (hash suffix stripped).
 
 Models without any tests contribute no task at all — their edges collapse
 through to downstream models' tests.
@@ -167,11 +167,10 @@ def _split_model_test_tasks(dag: DbtDag) -> None:
         new_ids: set[str] = set()
         used_labels: set[str] = set()
         for test_name in test_names:
-            # dbt suffixes long generic test names with _<10-hex-char hash>;
-            # drop it for readable task ids, but keep the full node name in
-            # --select (dbt needs it to target the test). Fall back to the
-            # full name in the unlikely case stripping causes a collision.
-            label = re.sub(r"_[0-9a-f]{10}$", "", test_name)
+            # Cosmos/dbt ls node names suffix long generic tests with
+            # _<10-hex-char hash>. Strip it for readable task ids and for proper selections
+            base_test_name = re.sub(r"_[0-9a-f]{10}$", "", test_name)
+            label = base_test_name
             if label in used_labels:
                 label = test_name
             used_labels.add(label)
@@ -183,7 +182,7 @@ def _split_model_test_tasks(dag: DbtDag) -> None:
                 project_dir=DBT_PROJECT_PATH,
                 profile_config=profile_config,
                 dbt_executable_path=DBT_EXECUTABLE_PATH,
-                select=[test_name],
+                select=[base_test_name],
                 install_deps=False,
             )
             new_ids.add(test_task.task_id)
