@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run dbt-coverage for modified models and full lineage; require at least one test per model.
 # Run from container with -w /repo. Uses staged .sql to determine modified.
-# Usage: docker exec -w /repo dbt_cli bash /repo/scripts/dbt-coverage.sh
+# Usage: docker exec -w /repo dbt_cli bash /repo/scripts/dbt/coverage.sh
 set -e
 PROJECT_DIR=/usr/app/dbt
 PROFILES_DIR=/usr/app/dbt
