@@ -24,7 +24,7 @@ airflow_cli connections delete postgres_default >/dev/null 2>&1 || true
 airflow_cli connections add postgres_default \
   --conn-type postgres \
   --conn-host "$WAREHOUSE_CONTAINER" \
-  --conn-schema public \
+  --conn-schema "$WAREHOUSE_DB" \
   --conn-login "$WAREHOUSE_USER" \
   --conn-password "$WAREHOUSE_PASSWORD" \
   --conn-port "$WAREHOUSE_PORT" >/dev/null
