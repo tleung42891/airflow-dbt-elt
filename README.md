@@ -48,7 +48,9 @@ Staging models are tagged in `dbt_project.yml` (`pulls` / `contributions`); mart
 │   ├── airflow/Dockerfile   # Runtime: Airflow + Cosmos + dbt venv
 │   ├── dag-tests/Dockerfile # Extends Airflow image + pytest
 │   └── dbt/Dockerfile       # Slim dbt_cli (legacy / pre-commit)
-├── scripts/                 # pre-commit helpers (modified run/test, coverage)
+├── scripts/
+│   ├── dbt/                 # pre-commit helpers (modified run/test, coverage)
+│   └── setup/               # setup.sh modules (docker, stack, warehouse, ...)
 ├── tests/                   # pytest (DagBag + utils)
 └── docker-compose.yaml
 ```
@@ -60,6 +62,23 @@ Staging models are tagged in `dbt_project.yml` (`pulls` / `contributions`); mart
 - Access to GitHub API (token required)
 
 ## Setup Instructions
+
+### Quick Start (one command)
+
+`setup.sh` automates everything below — Docker checks (with optional install), `.env` + `profiles.yml` generation, image builds, the core Compose stack, `pg-warehouse`, Airflow connections/variables, and the optional components:
+
+```bash
+./setup.sh --github-token ghp_xxx \
+           --github-repos '["your-user/your-repo"]' \
+           --github-usernames '["your-user"]' \
+           --unpause
+```
+
+Useful flags: `--install-docker` (macOS/Homebrew), `--with-metabase`, `--with-elementary`, `--with-flower`, `--with-tests`, `--all`, `--skip-build`, `--warehouse-password`, `--teardown`. See `./setup.sh --help` for the full list. The script is idempotent — safe to re-run to pick up missing pieces (e.g. add the GitHub token later).
+
+`setup.sh` is a thin orchestrator over modular steps in `scripts/setup/` (docker prereqs, config generation, compose stack, warehouse, Airflow bootstrap, optional components). Each module can also be run standalone, e.g. `./scripts/setup/warehouse.sh` or `GITHUB_TOKEN=ghp_xxx ./scripts/setup/airflow.sh`.
+
+The manual steps below remain for reference.
 
 ### 1. Start Core Services
 
@@ -107,7 +126,7 @@ The data warehouse PostgreSQL instance runs as a standalone container on the Com
 
 ```bash
 docker run --name pg-warehouse \
-  --network airflow-dbt-elt_default \
+  --network airflow-github-project_default \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=mysecretpassword \
   -e POSTGRES_DB=postgres \
@@ -216,7 +235,7 @@ Configure in Airflow UI (Admin → Connections):
 1. **PostgreSQL** (`postgres_default`):
    - Connection Type: Postgres
    - Host: `pg-warehouse`
-   - Schema: `public`
+   - Schema: `postgres`
    - Login: `postgres`
    - Password: `mysecretpassword`
    - Port: `5432`
